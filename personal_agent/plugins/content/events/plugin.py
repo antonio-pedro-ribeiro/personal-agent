@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 from personal_agent.kernel.context import RunContext
 from personal_agent.kernel.models import Interests, Item, RankHints, Source
 from personal_agent.kernel.services.extractor import ExtractionSpec
+from personal_agent.kernel.services.llm import LLMUnavailable
 from personal_agent.plugins.content.events import filters
 from personal_agent.plugins.content.events.adapters import ADAPTERS, ical
 
@@ -42,6 +43,9 @@ class EventsPlugin:
         for source in sources:
             try:
                 items.extend(self._collect_one(source, interests, ctx, tz, window))
+            except LLMUnavailable as exc:
+                if not getattr(ctx.llm, "unavailable", None):
+                    ctx.warn(f"source '{source.id}' skipped ({exc})")
             except Exception as exc:
                 ctx.warn(f"source '{source.id}' failed: {type(exc).__name__}: {exc}")
         return items

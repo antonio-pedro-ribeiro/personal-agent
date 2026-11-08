@@ -25,6 +25,7 @@ API_KEY_ENV = "PERSONAL_AGENT_ANTHROPIC_API_KEY"
 CLAUDE_CODE_TOKEN_ENV = "PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN"
 GEMINI_API_KEY_ENV = "PERSONAL_AGENT_GEMINI_API_KEY"
 GOOGLE_CLOUD_PROJECT_ENV = "PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT"
+GOOGLE_CLOUD_LOCATION_ENV = "PERSONAL_AGENT_GOOGLE_CLOUD_LOCATION"
 MODEL_ENV = "PERSONAL_AGENT_MODEL"
 EFFORT_ENV = "PERSONAL_AGENT_EFFORT"
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -334,8 +335,14 @@ def select(
             return None, ["Gemini CLI (`gemini`) not found on PATH"]
         model, note = _model(env, ("gemini",), DEFAULT_GEMINI_MODEL)
         project = env.get(GOOGLE_CLOUD_PROJECT_ENV, "").strip() or None
+        location = env.get(GOOGLE_CLOUD_LOCATION_ENV, "").strip() or None
         impl = GeminiCliLLM(
-            command=[exe], model=model, effort=effort, project=project, resolve=resolve
+            command=[exe],
+            model=model,
+            effort=effort,
+            project=project,
+            location=location,
+            resolve=resolve,
         )
     else:
         return None, [f"unknown {PROVIDER_ENV} '{name}' (expected one of {', '.join(PROVIDERS)})"]

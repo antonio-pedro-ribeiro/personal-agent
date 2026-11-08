@@ -43,6 +43,7 @@ T = TypeVar("T", bound=BaseModel)
 
 NAME = "Gemini CLI"
 PROJECT_VAR = "GOOGLE_CLOUD_PROJECT"
+LOCATION_VAR = "GOOGLE_CLOUD_LOCATION"
 SEARCH_TOOL = "google_web_search"
 FETCH_TOOL = "web_fetch"
 BASE_FLAGS = [
@@ -51,9 +52,9 @@ BASE_FLAGS = [
     "--output-format",
     "stream-json",
     "--extensions",
-    "",
+    "none",
     "--allowed-mcp-server-names",
-    "",
+    "none",
 ]
 BLOCKED = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION", "IMAGE_SAFETY"}
 _URL_RE = re.compile(r"https?://[^\s)>\]\"',]+")
@@ -69,6 +70,7 @@ class GeminiCliLLM:
         model: str,
         effort: str = DEFAULT_EFFORT,
         project: str | None = None,
+        location: str | None = None,
         resolve: Callable[[str], str | None] | None = None,
         runner: Runner = run_subprocess,
         timeout: float = DEFAULT_TIMEOUT_S,
@@ -77,6 +79,7 @@ class GeminiCliLLM:
         self.model = model
         self.effort = effort
         self.project = project
+        self.location = location
         self.resolve = resolve
         self.runner = runner
         self.timeout = timeout
@@ -110,8 +113,6 @@ class GeminiCliLLM:
         if ws:
             tools = f"{SEARCH_TOOL},{FETCH_TOOL}" if ws.fetch_uses else SEARCH_TOOL
             argv += ["--allowed-tools", tools]
-        else:
-            argv += ["--allowed-tools", ""]
         return argv
 
     @staticmethod
@@ -127,11 +128,20 @@ class GeminiCliLLM:
         )
         return body
 
-    def _run(self, argv: list[str], prompt: str) -> tuple[str, set[str]]:
-        extra = {"GEMINI_CLI_TRUST_WORKSPACE": "true", "NO_BROWSER": "1"}
+    def _env(self) -> dict[str, str]:
+        extra = {
+            "GEMINI_CLI_TRUST_WORKSPACE": "true",
+            "GOOGLE_GENAI_USE_GCA": "true",
+            "NO_BROWSER": "1",
+        }
         if self.project:
             extra[PROJECT_VAR] = self.project
-        cli = self.runner(argv, prompt, clean_env(extra), self.timeout)
+        if self.location:
+            extra[LOCATION_VAR] = self.location
+        return clean_env(extra)
+
+    def _run(self, argv: list[str], prompt: str) -> tuple[str, set[str]]:
+        cli = self.runner(argv, prompt, self._env(), self.timeout)
         events = json_events(cli.stdout)
         urls, searches = _tool_results(events)
         result = next(

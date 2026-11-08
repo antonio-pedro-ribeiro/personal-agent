@@ -551,10 +551,10 @@ def test_gemini_cli_flags_restrict_tools_and_extensions() -> None:
     plain, search_only, search_fetch = (c[0] for c in runner.calls)
     for argv in (plain, search_only, search_fetch):
         assert "-p" in argv and "--output-format" in argv
-        assert argv[argv.index("--extensions") + 1] == ""
-        assert argv[argv.index("--allowed-mcp-server-names") + 1] == ""
+        assert argv[argv.index("--extensions") + 1] == "none"
+        assert argv[argv.index("--allowed-mcp-server-names") + 1] == "none"
         assert argv[argv.index("--model") + 1] == "gemini-3.8-flash"
-    assert plain[plain.index("--allowed-tools") + 1] == ""
+    assert "--allowed-tools" not in plain
     assert search_only[search_only.index("--allowed-tools") + 1] == "google_web_search"
     assert search_fetch[search_fetch.index("--allowed-tools") + 1] == "google_web_search,web_fetch"
     assert "SYS" in runner.calls[0][1] and '"items"' in runner.calls[0][1]
@@ -632,11 +632,17 @@ def test_select_gemini_cli_and_unknown_provider(monkeypatch: pytest.MonkeyPatch)
         "PERSONAL_AGENT_LLM_PROVIDER": "gemini_cli",
         "PERSONAL_AGENT_MODEL": "claude-opus-5-5",
         "PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT": "my-project",
+        "PERSONAL_AGENT_GOOGLE_CLOUD_LOCATION": "europe-west1",
     }
     model, notes = llm.select(env)
     assert model is not None and model.provider == "gemini_cli" and model.billing == "plan"
     assert model.model == llm.DEFAULT_GEMINI_MODEL and "not a model" in notes[0]
     assert isinstance(model.inner, GeminiCliLLM) and model.inner.project == "my-project"
+    assert model.inner.location == "europe-west1"
+    sub_env = model.inner._env()
+    assert sub_env["GOOGLE_CLOUD_PROJECT"] == "my-project"
+    assert sub_env["GOOGLE_CLOUD_LOCATION"] == "europe-west1"
+    assert sub_env["GOOGLE_GENAI_USE_GCA"] == "true"
     model, notes = llm.select({"PERSONAL_AGENT_LLM_PROVIDER": "gpt"})
     assert model is None and "unknown" in notes[0]
 

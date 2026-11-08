@@ -155,11 +155,12 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
         report = runner.run(config, registry, ctx, args.plugin, args.output)
     finally:
         ctx.store.close()
-    report.warnings += getattr(ctx.ranker, "errors", [])
     if reason := getattr(ctx.llm, "unavailable", None):
         report.warnings.append(
             f"LLM provider unavailable ({reason}): keyword ranking used, web sources skipped"
         )
+    else:
+        report.warnings += getattr(ctx.ranker, "errors", [])
 
     if args.dry_run:
         if ctx.llm is None:
@@ -243,6 +244,8 @@ def cmd_sources_test(args: argparse.Namespace, registry: Registry) -> int:
         items = plugin.collect([source], config.interests.for_plugin(source.plugin), ctx)
     finally:
         ctx.store.close()
+    if reason := getattr(ctx.llm, "unavailable", None):
+        ctx.warn(f"LLM provider unavailable ({reason})")
     print(f"{source.id} ({source.type}): {len(items)} item(s), before filters")
     for item in items:
         when = f"{item.start.astimezone(ctx.tz):%Y-%m-%d %H:%M}  " if item.start else ""

@@ -10,7 +10,7 @@ from typing import Protocol
 from pydantic import BaseModel
 
 from personal_agent.kernel.models import Interests, Item, RankedItem, RankHints
-from personal_agent.kernel.services.llm import LLM
+from personal_agent.kernel.services.llm import LLM, LLMUnavailable
 
 log = logging.getLogger(__name__)
 MAX_CANDIDATES = 50
@@ -149,6 +149,10 @@ class LLMRanker:
                 prompt=self._prompt(candidates, interests, hints, feedback),
                 schema=Scores,
             )
+        except LLMUnavailable as exc:
+            log.info("LLM provider unavailable (%s); using keyword ranking", exc)
+            self.errors.append(f"LLM ranking failed ({type(exc).__name__}: {exc}); used keywords")
+            return self.fallback.rank(items, interests, hints, feedback)
         except Exception as exc:
             log.exception("LLM ranking failed; using keyword ranking")
             self.errors.append(f"LLM ranking failed ({type(exc).__name__}: {exc}); used keywords")

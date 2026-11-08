@@ -49,6 +49,7 @@ _UNAVAILABLE_PATTERNS = (
     r"credit balance",
     r"ineligible ?tier",
     r"no longer supported",
+    r"valid license",
     r"google_cloud_project",
 )
 
@@ -66,7 +67,10 @@ def unavailable_reason(text: str) -> str | None:
     low = text.lower()
     for pattern in _UNAVAILABLE_PATTERNS:
         if re.search(pattern, low):
-            line = next((ln.strip() for ln in text.splitlines() if ln.strip()), text.strip())
+            line = next(
+                (ln.strip() for ln in text.splitlines() if re.search(pattern, ln.lower())),
+                text.strip(),
+            )
             return line[:200]
     return None
 
