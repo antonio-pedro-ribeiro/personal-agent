@@ -24,6 +24,9 @@ class PluginReport:
     collected: int = 0
     filtered: int = 0
     kept: int = 0
+    threshold: float = 0.0
+    ranked: list[RankedItem] = field(default_factory=list)  # full ranked list, incl. rejected
+    kept_ids: set[str] = field(default_factory=set)  # subset of `ranked` actually routed
     error: str | None = None
 
 
@@ -138,8 +141,11 @@ def run(
             ranked = ctx.ranker.rank(items, interests, hints, store.recent_feedback(name))
             if not ctx.dry_run:
                 store.record_rankings(ranked, now)
+            pr.threshold = hints.threshold
+            pr.ranked = ranked
             kept[name] = [r for r in ranked if r.score >= hints.threshold][: hints.max_items]
             pr.kept = len(kept[name])
+            pr.kept_ids = {r.id for r in kept[name]}
         except Exception as exc:
             ctx.log.exception("content plugin %s failed", name)
             pr.error = _error(exc)
