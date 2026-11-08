@@ -13,6 +13,9 @@ One section per content plugin, one checkbox per source. Format: docs/SPEC.md §
 - [X] **lisboa-psychedelic-society** — ical
   - url: https://www.meetup.com/lisboa-psychedelic-society/events/ical/   ← Meetup's iCal feed (free, no LLM)
   - page: https://www.meetup.com/lisboa-psychedelic-society/
+- [X] **ecstatic-dance-lisboa** — web_page
+  - url: https://ecstaticdance.org/dance/ecstatic-dance-lisboa/   ← recurring monthly (3rd Saturday); no feed, tickets via Eventbrite
+  - feed: none
 - [ ] **example-ical** — ical
   - url: https://example.com/calendar.ics
 

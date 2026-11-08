@@ -25,6 +25,10 @@ Edit freely. Checked boxes are active; uncheck to pause. Format: docs/SPEC.md §
   - keywords: psychedelic, psychedelics, psicadélico, psicadélicos, psilocybin, psilocibina, mushrooms, ayahuasca, DMT, LSD, mescaline, MDMA
   - weight: 0.9
   - plugins: events
+- [x] **ecstatic-dance** — Ecstatic Dance journeys (free-movement, no talking, live DJ set)
+  - keywords: ecstatic dance, dança extática, 5Rhythms, free movement dance
+  - weight: 0.85
+  - plugins: events
 
 ## Dislikes
 - [x] networking mixers
