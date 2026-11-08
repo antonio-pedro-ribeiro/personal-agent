@@ -22,7 +22,7 @@ independent and can be built in either order.
 
 | Needed by | Item |
 |---|---|
-| M2 | `ANTHROPIC_API_KEY` |
+| M2 | `AGENT_ANTHROPIC_API_KEY` |
 | M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
 | M2 | Home city, timezone, initial topics for `interests.md` |
 | M2 | Google Cloud project with Calendar API enabled and an OAuth client of type **Desktop app**. Set the consent screen to **In production** (unverified is fine for personal use; you'll see a warning screen). In **Testing** status Google expires refresh tokens after 7 days, which would break scheduled runs. |
@@ -117,7 +117,7 @@ Goal: the agent runs by itself every day and learns from what you keep or delete
 
 **Deployment**
 - `.github/workflows/agent.yml`: daily `schedule` + `workflow_dispatch`; `concurrency` group;
-  `agent.db` on the orphan `state` branch; commit `digests/`; secrets `ANTHROPIC_API_KEY`,
+  `agent.db` on the orphan `state` branch; commit `digests/`; secrets `AGENT_ANTHROPIC_API_KEY`,
   `GOOGLE_TOKEN_JSON`; run-log artifact (items, scores, cost).
 - `kernel/platform.py` + `agent schedule install|remove`: Task Scheduler on Windows,
   cron/launchd elsewhere.

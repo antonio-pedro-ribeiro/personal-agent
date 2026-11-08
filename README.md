@@ -106,7 +106,7 @@ agent schedule install|remove    *
 ## Requirements (planned)
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
-- `ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
+- `AGENT_ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
   only feed sources and a keyword ranker work)
 - Google OAuth credentials, if a Google output is enabled
 

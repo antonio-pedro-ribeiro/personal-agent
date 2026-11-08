@@ -61,6 +61,8 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
 - Python 3.12+, type hints everywhere, pydantic models for data crossing boundaries.
 - Small modules; no framework beyond what `docs/SPEC.md` §8 lists without discussing first.
 - LLM model name comes from config/env, never hard-coded in call sites.
+- Env vars and secrets use the `AGENT_` prefix (`AGENT_ANTHROPIC_API_KEY`, `AGENT_MODEL`, ...).
+  Pass the API key to the SDK explicitly; never rely on the SDK reading `ANTHROPIC_API_KEY`.
 
 ## Testing
 - `pytest` must pass before committing; CI runs it on Ubuntu and Windows.
