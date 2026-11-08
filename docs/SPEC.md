@@ -148,7 +148,11 @@ Adding a content type or an output = adding a plugin package; the kernel does no
 | `email` | the digest as an HTML/markdown email | all | — (v1) | `gmail.send` | cloud, local |
 
 Feedback rules: an item open/untouched for 14 days gives no signal; if several outputs give
-signals for one item, the latest wins. `agent rate <id> up|down` adds feedback directly.
+signals for one item, the latest wins, and a changed signal from the same output (👍 untick,
+👎 tick) replaces the earlier one. `agent rate <id> up|down` adds feedback directly (stored
+under output id `cli`). Calendar: a deleted (or cancelled) suggestion is `rejected`; one still
+present after its end is `accepted`; upcoming ones give nothing yet. Digest: a ticked box
+directly under an entry gives `up`/`down`; both ticked gives nothing.
 
 **Not in v1:** watches (news → event tracking), embedding clustering, chat bot, web UI,
 auto-editing interests, feedback by email reply.
@@ -438,7 +442,7 @@ agent plugins                     # content + output plugins, enabled state
 agent sources test <id>
 agent outputs test <id>           # publish one sample item to that output's namespace
 agent auth google                 # one-time OAuth consent for enabled outputs' scopes
-agent rate <item-id> up|down      # planned (M4), not yet implemented
+agent rate <item-id> up|down      # feedback by id (the short id is enough, ≥ 6 hex chars)
 agent schedule install|remove     # planned (M4), not yet implemented
 ```
 `--dry-run` skips publishing only; ranking/extraction LLM calls still happen and are still

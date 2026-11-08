@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Literal
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _TOP_BULLET = re.compile(r"^[-*+]\s+(.*)$")
@@ -156,3 +157,31 @@ def _escape(text: str) -> str:
 
 
 ID_MARKER = re.compile(r"`id:([0-9a-f]+)`")
+
+_FEEDBACK_BOX = re.compile(r"^(?:\t+| {2,})[-*+]\s+\[([ xX])\]\s*(👍|👎)")
+
+
+Vote = Literal["up", "down"]
+
+
+def parse_feedback(text: str) -> dict[str, Vote]:
+    """Ticked boxes in digest entries (see ``render_item``): short id → ``up`` or ``down``.
+
+    An entry with both boxes ticked is ambiguous and left out; so are entries with none.
+    Accepts CRLF and ``[X]``.
+    """
+    ticks: dict[str, set[Vote]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if _TOP_BULLET.match(line):
+            ids = ID_MARKER.findall(line)
+            current = ids[-1] if ids else None
+            continue
+        if current is None:
+            continue
+        if m := _FEEDBACK_BOX.match(line):
+            if m.group(1) != " ":
+                ticks.setdefault(current, set()).add("up" if m.group(2) == "👍" else "down")
+        elif line.strip() and not _NESTED_BULLET.match(line):
+            current = None  # free text or a heading ends the entry
+    return {short: next(iter(s)) for short, s in ticks.items() if len(s) == 1}

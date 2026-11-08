@@ -147,15 +147,34 @@ class Store:
     # --- feedback -----------------------------------------------------------------------
 
     def record_feedback(self, feedback: Iterable[Feedback]) -> int:
-        """Store feedback signals; duplicates are ignored. Returns the number of new rows."""
-        before = self.conn.total_changes
+        """Store feedback signals. Idempotent: a signal equal to the latest one already stored
+        for the same (item, output) is ignored; a changed mind (👍 then 👎 then 👍 again) is
+        stored with its new time, so the latest signal wins. Returns the number of changes."""
+        changed = 0
         with self.conn:
-            self.conn.executemany(
-                "INSERT OR IGNORE INTO feedback (item_id, output_id, signal, at)"
-                " VALUES (?, ?, ?, ?)",
-                [(f.item_id, f.output_id, f.signal, _iso(f.at)) for f in feedback],
-            )
-        return self.conn.total_changes - before
+            for f in feedback:
+                row = self.conn.execute(
+                    "SELECT signal FROM feedback WHERE item_id = ? AND output_id = ?"
+                    " ORDER BY at DESC LIMIT 1",
+                    (f.item_id, f.output_id),
+                ).fetchone()
+                if row is not None and row["signal"] == f.signal:
+                    continue
+                self.conn.execute(
+                    "INSERT INTO feedback (item_id, output_id, signal, at) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT (item_id, output_id, signal) DO UPDATE SET at = excluded.at",
+                    (f.item_id, f.output_id, f.signal, _iso(f.at)),
+                )
+                changed += 1
+        return changed
+
+    def find_items(self, id_prefix: str) -> list[Item]:
+        """Items whose id starts with ``id_prefix`` (a short id from a digest or calendar)."""
+        rows = self.conn.execute(
+            "SELECT json FROM items WHERE id LIKE ? ORDER BY first_seen DESC",
+            (id_prefix.lower().replace("%", "").replace("_", "") + "%",),
+        )
+        return [Item(**json.loads(r["json"])) for r in rows]
 
     def recent_feedback(self, plugin: str, limit: int = 20) -> list[tuple[Item, str]]:
         """Latest signal per item for ``plugin``, newest first."""

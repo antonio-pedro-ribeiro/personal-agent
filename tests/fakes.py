@@ -135,6 +135,16 @@ class _Events:
 
         return _Call(run)
 
+    def get(self, calendarId: str, eventId: str) -> _Call:
+        def run() -> dict[str, Any]:
+            self.svc.touched_calendars.append(calendarId)
+            for event in self.svc.events_db.get(calendarId, []):
+                if event["id"] == eventId:
+                    return event
+            raise HttpError(404)
+
+        return _Call(run)
+
     def insert(self, calendarId: str, body: dict[str, Any]) -> _Call:
         def run() -> dict[str, Any]:
             self.svc.touched_calendars.append(calendarId)

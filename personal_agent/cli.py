@@ -1,4 +1,5 @@
-"""Command-line interface: ``agent run | plugins | sources test | outputs test | auth google``."""
+"""Command-line interface: ``agent run | plugins | sources test | outputs test | auth google |
+rate``."""
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from personal_agent.kernel import runner
 from personal_agent.kernel.adapters.web import WebSources
 from personal_agent.kernel.config import default_config_dir, load_config
 from personal_agent.kernel.context import RunContext
-from personal_agent.kernel.models import Config, RankedItem, make_item_id
+from personal_agent.kernel.models import Config, Feedback, RankedItem, make_item_id
 from personal_agent.kernel.plugin import Registry, discover
 from personal_agent.kernel.services import google, llm
 from personal_agent.kernel.services.availability import (
@@ -178,6 +179,8 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
     else:
         mode = "Run"
     print(f"{mode} — {ctx.now.astimezone(ctx.tz):%Y-%m-%d %H:%M %Z}")
+    if report.feedback_recorded:
+        print(f"  feedback: {report.feedback_recorded} new signal(s) recorded")
     for p in report.plugins:
         status = (
             f"error: {p.error}"
@@ -314,6 +317,46 @@ def cmd_auth_google(args: argparse.Namespace, registry: Registry) -> int:
     return 0
 
 
+RATE_OUTPUT_ID = "cli"  # feedback given with `agent rate` is stored under this output id
+MIN_ID_PREFIX = 6
+
+
+def cmd_rate(args: argparse.Namespace, registry: Registry) -> int:
+    """Record 👍/👎 for an item by id (the short ``id:`` shown in digests and calendar notes)."""
+    prefix = args.item_id.strip().removeprefix("id:").strip("`").lower()
+    if len(prefix) < MIN_ID_PREFIX or any(c not in "0123456789abcdef" for c in prefix):
+        print(f"Expected an item id (at least {MIN_ID_PREFIX} hex characters)", file=sys.stderr)
+        return 2
+    store = Store(args.db)
+    try:
+        matches = store.find_items(prefix)
+        if not matches:
+            print(f"No item with id {prefix}", file=sys.stderr)
+            return 2
+        if len(matches) > 1:
+            print(
+                f"Id {prefix} matches {len(matches)} items; give more characters:", file=sys.stderr
+            )
+            for item in matches[:10]:
+                print(f"  {item.short_id}  {item.title}", file=sys.stderr)
+            return 2
+        (item,) = matches
+        store.record_feedback(
+            [
+                Feedback(
+                    item_id=item.id,
+                    output_id=RATE_OUTPUT_ID,
+                    signal=args.signal,
+                    at=datetime.now(UTC),
+                )
+            ]
+        )
+    finally:
+        store.close()
+    print(f"Rated {args.signal}: {item.title} ({item.short_id})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -371,6 +414,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--print-token", action="store_true", help="also print the token for cloud mode"
     )
     google_p.set_defaults(func=cmd_auth_google)
+
+    rate_p = sub.add_parser("rate", help="give feedback on an item by id")
+    rate_p.add_argument("item_id", help="the id shown as `id:...` in digests and calendar notes")
+    rate_p.add_argument("signal", choices=["up", "down"])
+    rate_p.set_defaults(func=cmd_rate)
+
     return parser
 
 

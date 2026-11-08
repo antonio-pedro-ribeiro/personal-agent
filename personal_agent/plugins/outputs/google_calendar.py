@@ -8,12 +8,12 @@ event carries the private extended property ``agentItemId``, checked before inse
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from personal_agent.kernel.context import RunContext
-from personal_agent.kernel.models import Delivery, Feedback, OutputConfig, RankedItem
+from personal_agent.kernel.models import Delivery, Feedback, OutputConfig, RankedItem, Signal
 
 SCOPE = "calendar.app.created"
 DEFAULT_NAME = "Suggestions"
@@ -58,6 +58,33 @@ def _http_status(exc: Exception) -> int | None:
     return int(status) if status is not None else None
 
 
+def _event_end(event: dict[str, Any], tz: tzinfo) -> datetime | None:
+    end = event.get("end") or {}
+    if value := end.get("dateTime"):
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if value := end.get("date"):  # all-day: exclusive end date, midnight in the calendar tz
+        return datetime.combine(date.fromisoformat(str(value)), time(0), tz)
+    return None
+
+
+def event_signal(
+    events: Any, cal_id: str, event_id: str, now: datetime, tz: tzinfo
+) -> Signal | None:
+    """Feedback from one suggestion: deleted → rejected, ended and kept → accepted."""
+    try:
+        event = events.get(calendarId=cal_id, eventId=event_id).execute()
+    except Exception as exc:
+        if _http_status(exc) in (404, 410):
+            return "rejected"
+        raise
+    if event.get("status") == "cancelled":
+        return "rejected"
+    end = _event_end(event, tz)
+    if end is not None and end <= now:
+        return "accepted"
+    return None  # still upcoming: no signal yet
+
+
 class GoogleCalendarOutput:
     type = "google_calendar"
     google_scopes: list[str] = [SCOPE]  # noqa: RUF012 - protocol attribute
@@ -70,9 +97,13 @@ class GoogleCalendarOutput:
             raise RuntimeError("Google is not connected: run `agent auth google`")
         return ctx.google.client("calendar", "v3", self.google_scopes)
 
+    @staticmethod
+    def _calendar_key(cfg: OutputConfig) -> str:
+        return f"google_calendar:{cfg.id}:calendar_id"
+
     def calendar_id(self, service: Any, cfg: OutputConfig, ctx: RunContext) -> str:
         """Id of this output's own calendar, created on first use (or if deleted)."""
-        key = f"google_calendar:{cfg.id}:calendar_id"
+        key = self._calendar_key(cfg)
         cal_id = ctx.store.get_kv(key)
         if cal_id:
             try:
@@ -123,7 +154,23 @@ class GoogleCalendarOutput:
     def sync_feedback(
         self, deliveries: Sequence[Delivery], cfg: OutputConfig, ctx: RunContext
     ) -> list[Feedback]:
-        return []  # kept/deleted suggestions are read back in M3
+        """Deleted suggestion → ``rejected``; still there after it ended → ``accepted``."""
+        if not deliveries:
+            return []
+        cal_id = ctx.store.get_kv(self._calendar_key(cfg))
+        if not cal_id:
+            return []  # our calendar was never created, so nothing was delivered here
+        events = self._service(ctx).events()
+        feedback: list[Feedback] = []
+        for d in deliveries:
+            if not d.external_ref:
+                continue
+            signal = event_signal(events, cal_id, d.external_ref, ctx.now, ctx.tz)
+            if signal is not None:
+                feedback.append(
+                    Feedback(item_id=d.item_id, output_id=cfg.id, signal=signal, at=ctx.now)
+                )
+        return feedback
 
     def preview(self, items: Sequence[RankedItem], cfg: OutputConfig, ctx: RunContext) -> str:
         name = cfg.attrs.get("calendar_name") or DEFAULT_NAME

@@ -1,6 +1,7 @@
 """Markdown digest output: ``<path>/YYYY-MM-DD.md`` with one section per content plugin.
 
 Idempotent: items already present in the day's file (by ``id:`` marker) are not added again.
+Feedback: ticked 👍/👎 boxes under an entry become ``up``/``down`` signals.
 Only writes inside its own folder (``path`` attribute, default ``digests``; relative paths
 resolve against the current working directory).
 """
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from personal_agent.kernel.context import RunContext
 from personal_agent.kernel.models import Delivery, Feedback, OutputConfig, RankedItem
-from personal_agent.kernel.services.checklist import ID_MARKER, render_item
+from personal_agent.kernel.services.checklist import ID_MARKER, parse_feedback, render_item
 
 DEFAULT_DIR = "digests"
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -95,7 +96,24 @@ class MarkdownDigestOutput:
     def sync_feedback(
         self, deliveries: Sequence[Delivery], cfg: OutputConfig, ctx: RunContext
     ) -> list[Feedback]:
-        return []  # ticked 👍/👎 boxes are read back in M3
+        """Read ticked boxes from the digest files these deliveries point to."""
+        by_file: dict[str, list[tuple[Delivery, str]]] = {}
+        for d in deliveries:
+            path, sep, short = (d.external_ref or "").rpartition("#")
+            if sep and path and short:
+                by_file.setdefault(path, []).append((d, short))
+        feedback: list[Feedback] = []
+        for path, group in by_file.items():
+            file = Path(path)
+            if not file.is_file():
+                continue  # moved or deleted by the user: no signal
+            ticks = parse_feedback(file.read_text(encoding="utf-8"))
+            for d, short in group:
+                if signal := ticks.get(short):
+                    feedback.append(
+                        Feedback(item_id=d.item_id, output_id=cfg.id, signal=signal, at=ctx.now)
+                    )
+        return feedback
 
     def preview(self, items: Sequence[RankedItem], cfg: OutputConfig, ctx: RunContext) -> str:
         blocks = [f"## {h}\n\n{b}" for h, b in render_sections(items, ctx).items()]
