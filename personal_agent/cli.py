@@ -115,6 +115,21 @@ def _cost_line(ctx: RunContext) -> str | None:
     )
 
 
+def _print_explain(p: runner.PluginReport) -> None:
+    """Every ranked item with its score/reason, and why it was kept or dropped (``--explain``)."""
+    if p.error or not p.ranked:
+        return
+    for r in sorted(p.ranked, key=lambda r: -r.score):
+        if r.id in p.kept_ids:
+            verdict = "KEPT"
+        elif r.score >= p.threshold:
+            verdict = f"capped (score >= {p.threshold:.0f} threshold, but over max_items)"
+        else:
+            verdict = f"dropped (score < {p.threshold:.0f} threshold)"
+        print(f"    [{r.score:5.1f}] {verdict:<45} {r.title}")
+        print(f"             reason: {r.reason}")
+
+
 def _print_warnings(warnings: Sequence[str]) -> None:
     if warnings:
         print("\nWarnings:")
@@ -131,7 +146,15 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
         ctx.store.close()
     report.warnings += getattr(ctx.ranker, "errors", [])
 
-    mode = "DRY RUN (nothing written)" if args.dry_run else "Run"
+    if args.dry_run:
+        mode = (
+            "DRY RUN (nothing published; ranking/extraction below may still call the LLM "
+            "and cost money)"
+            if ctx.llm is not None
+            else "DRY RUN (nothing published)"
+        )
+    else:
+        mode = "Run"
     print(f"{mode} — {ctx.now.astimezone(ctx.tz):%Y-%m-%d %H:%M %Z}")
     for p in report.plugins:
         status = (
@@ -140,6 +163,8 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
             else f"{p.collected} found, {p.filtered} after filters, {p.kept} kept"
         )
         print(f"  [{p.name}] {status}")
+        if args.explain:
+            _print_explain(p)
     for o in report.outputs:
         if o.error:
             status = f"error: {o.error}"
@@ -154,6 +179,15 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
         if o.preview:
             print(f"\n--- preview: {o.id} ---\n{o.preview}")
     _print_warnings([*config.warnings, *registry.warnings, *report.warnings])
+    if args.max_cost is not None and ctx.llm is not None and ctx.llm.usage.calls:
+        actual = ctx.llm.usage.cost_usd(ctx.llm.model)
+        if actual is not None and actual > args.max_cost:
+            print(
+                f"\nThis run cost ~${actual:.3f}, above --max-cost ${args.max_cost:.2f} "
+                "(the LLM calls already happened; this only flags it after the fact).",
+                file=sys.stderr,
+            )
+            return 3
     return 0
 
 
@@ -273,6 +307,21 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--plugin", help="only this content plugin")
     run_p.add_argument("--output", help="only this output id")
     run_p.add_argument("--dry-run", action="store_true", help="preview; write nothing")
+    run_p.add_argument(
+        "--explain",
+        action="store_true",
+        help="print every ranked item with its score/reason and why it was kept or dropped",
+    )
+    run_p.add_argument(
+        "--max-cost",
+        type=float,
+        default=None,
+        metavar="USD",
+        help=(
+            "exit with code 3 and a warning if this run's estimated LLM cost exceeds USD "
+            "(checked after the run completes; does not stop calls already made)"
+        ),
+    )
     run_p.set_defaults(func=cmd_run)
 
     plugins_p = sub.add_parser("plugins", help="list installed plugins")
