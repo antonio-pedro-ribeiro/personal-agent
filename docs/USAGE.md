@@ -367,6 +367,7 @@ all output to that file instead of the terminal.
 | `agent run --output calendar` | only this output |
 | `agent run --explain` | also list every ranked item with its score, reason and verdict |
 | `agent run --fail-on-error` | exit with code 4 if a plugin, output or feedback sync failed, or no LLM was available (for scheduled runs) |
+| `agent run --quiet` | no live step log on stderr while it runs (the summary is still printed) |
 | `agent run --max-cost USD` | exit with code 3 if the run's estimated cost was above USD (checked afterwards) |
 | `agent plugins` | installed content and output plugins, and whether each is enabled |
 | `agent sources test <id>` | fetch one source and list what it returns, before filters |

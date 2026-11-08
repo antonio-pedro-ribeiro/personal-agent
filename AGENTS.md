@@ -16,8 +16,9 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
 - Content plugins never know about outputs, and outputs never know about specific content
   plugins; the kernel router connects them using `outputs.md`.
 - Plugins use kernel services (`ctx.store`, `ctx.ranker`, `ctx.availability`, `ctx.google`,
-  `ctx.http`) and never open DB connections or call the LLM directly. Google clients come
-  only from `ctx.google`, limited to the scopes the output declares.
+  `ctx.http`, `ctx.progress`) and never print to the console, open DB connections or call
+  the LLM directly. Google clients come only from `ctx.google`, limited to the scopes the
+  output declares.
 - Source adapters belong to the content plugin that uses them
   (`plugins/content/<name>/adapters/`).
 - `publish()` must be idempotent per (item, output): re-runs never create duplicates.

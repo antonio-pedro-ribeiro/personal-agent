@@ -459,7 +459,7 @@ two outputs and the config parser agree on syntax.
 ```
 agent [--config-dir DIR] [--db FILE] [--log-file FILE] [-v] <command>
 agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--max-cost USD]
-          [--fail-on-error]
+          [--fail-on-error] [--quiet]
 agent plugins                     # content + output plugins, enabled state
 agent sources test <id>
 agent outputs test <id>           # publish one sample item to that output's namespace
@@ -476,6 +476,15 @@ is checked after the run completes and does not prevent the LLM calls that alrea
 `--fail-on-error` exits 4 if any plugin, output or feedback sync failed, or no working LLM
 provider was available (for scheduled runs, which otherwise degrade silently).
 `--log-file` appends all output to a file (scheduled runs have no console).
+
+While it works, `agent run` prints a **step log** to stderr: a header (mode, time, LLM
+provider and model), then numbered steps (`[2/4] Collecting events (8 sources)`) with one line
+per source, web-search topic, filter/ranking pass and output, each with an item count and its
+duration, and `Done in …` at the end. On a terminal a line's label appears when the work starts;
+in CI logs, pipes and `--log-file` each line is written once, complete. The final summary,
+`--explain` and previews stay on stdout, unchanged. `--quiet` turns the step log off. Plugins
+report through `ctx.progress` (a kernel service, silent unless the CLI enables it), never by
+printing.
 
 The CLI is the **only** integration boundary into the kernel. Every other client — the
 scheduled cloud/local run, and the IDE cockpit below — invokes it rather than importing kernel

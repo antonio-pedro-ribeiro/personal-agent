@@ -22,6 +22,8 @@ from personal_agent.kernel.services.checklist import as_list
 from personal_agent.kernel.services.extractor import Document, ExtractionSpec, Extractor
 from personal_agent.kernel.services.http import Http, Response
 from personal_agent.kernel.services.llm import WebSearch
+from personal_agent.kernel.services.progress import Progress
+from personal_agent.kernel.services.progress import items as n_items
 
 GENERIC_TYPES = ("web_page", "web_search")
 DEFAULT_MAX_QUERIES = 3
@@ -139,6 +141,7 @@ class WebSources:
         tz: ZoneInfo,
         now: datetime,
         window: timedelta,
+        progress: Progress | None = None,
     ) -> list[Item]:
         extractor = self._need_extractor(source)
         queries = self.queries(source, interests.topics, interests.profile.city, tz, now, window)
@@ -149,9 +152,13 @@ class WebSources:
             city=interests.profile.city,
             timezone=tz.key,
         )
+        topics, _excluded = self.topic_coverage(source, interests.topics)
         items: list[Item] = []
-        for query in queries:
-            items.extend(extractor.search(spec, query, source.id, tz, now, web_search))
+        for topic, query in zip(topics, queries, strict=True):
+            with (progress or Progress()).task(topic.id) as task:
+                found = extractor.search(spec, query, source.id, tz, now, web_search)
+                task.result = n_items(len(found))
+            items.extend(found)
         return items
 
     @staticmethod

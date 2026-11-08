@@ -12,8 +12,17 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from personal_agent.kernel.context import RunContext
-from personal_agent.kernel.models import Config, Delivery, Dislike, Item, OutputConfig, RankedItem
-from personal_agent.kernel.plugin import OutputPlugin, Registry
+from personal_agent.kernel.models import (
+    Config,
+    Delivery,
+    Dislike,
+    Item,
+    OutputConfig,
+    RankedItem,
+    Source,
+)
+from personal_agent.kernel.plugin import ContentPlugin, OutputPlugin, Registry
+from personal_agent.kernel.services.progress import items as n_items
 
 FEEDBACK_WINDOW = timedelta(days=14)
 
@@ -102,23 +111,8 @@ def run(
             continue
         active.append((cfg, output))
 
-    # 1. Feedback from previous deliveries (never in dry-run).
-    if not ctx.dry_run:
-        for cfg, output in active:
-            try:
-                deliveries = store.deliveries_since(cfg.id, now - FEEDBACK_WINDOW)
-                feedback = output.sync_feedback(deliveries, cfg, ctx)
-                report.feedback_recorded += store.record_feedback(
-                    f.model_copy(update={"output_id": cfg.id}) for f in feedback
-                )
-            except Exception as exc:
-                ctx.log.exception("feedback sync failed for output %s", cfg.id)
-                message = f"output {cfg.id}: feedback sync failed: {_error(exc)}"
-                report.feedback_errors.append(message)
-                ctx.warn(message)
-
-    # 2. Content plugins.
-    kept: dict[str, list[RankedItem]] = {}
+    # Which content plugins run: they have enabled sources and an output that routes them.
+    runnable: list[tuple[str, ContentPlugin, list[Source], set[str]]] = []
     for name, plugin in registry.content.items():
         if only_plugin and name != only_plugin:
             continue
@@ -129,10 +123,43 @@ def run(
         if not targets:
             ctx.warn(f"no enabled output routes plugin '{name}' (skipped)")
             continue
+        runnable.append((name, plugin, sources, targets))
 
+    progress = ctx.progress
+    progress.total = 2 + 2 * len(runnable)
+
+    # 1. Feedback from previous deliveries (never in dry-run).
+    if ctx.dry_run:
+        progress.step("Feedback", "skipped (dry run)")
+    elif not active:
+        progress.step("Feedback", "no outputs")
+    else:
+        progress.step("Feedback")
+        for cfg, output in active:
+            try:
+                with progress.task(cfg.id, cfg.type) as task:
+                    deliveries = store.deliveries_since(cfg.id, now - FEEDBACK_WINDOW)
+                    feedback = output.sync_feedback(deliveries, cfg, ctx)
+                    recorded = store.record_feedback(
+                        f.model_copy(update={"output_id": cfg.id}) for f in feedback
+                    )
+                    task.result = f"{recorded} new"
+                report.feedback_recorded += recorded
+            except Exception as exc:
+                ctx.log.exception("feedback sync failed for output %s", cfg.id)
+                message = f"output {cfg.id}: feedback sync failed: {_error(exc)}"
+                report.feedback_errors.append(message)
+                ctx.warn(message)
+
+    # 2. Content plugins.
+    kept: dict[str, list[RankedItem]] = {}
+    for name, plugin, sources, targets in runnable:
         pr = PluginReport(name=name)
         report.plugins.append(pr)
         interests = config.interests.for_plugin(name)
+        noun = "source" if len(sources) == 1 else "sources"
+        progress.step(f"Collecting {name} ({len(sources)} {noun})")
+        ranking_started = False
         try:
             items = _dedupe(plugin.collect(sources, interests, ctx))
             pr.collected = len(items)
@@ -140,10 +167,17 @@ def run(
                 store.record_items(items, now)
             delivered = store.delivered_outputs([i.id for i in items])
             items = [i for i in items if not targets <= delivered[i.id]]
-            items = drop_disliked(plugin.filter(items, interests, ctx), interests.dislikes)
+            progress.line(f"→ {pr.collected} found, {len(items)} not yet delivered")
+            progress.step(f"Filtering & ranking {name}")
+            ranking_started = True
+            with progress.task("filters + dislikes") as task:
+                items = drop_disliked(plugin.filter(items, interests, ctx), interests.dislikes)
+                task.result = f"{len(items)} left"
             pr.filtered = len(items)
             hints = plugin.rank_hints(interests, ctx)
-            ranked = ctx.ranker.rank(items, interests, hints, store.recent_feedback(name))
+            with progress.task(f"ranking ({n_items(len(items))})") as task:
+                ranked = ctx.ranker.rank(items, interests, hints, store.recent_feedback(name))
+                task.result = "done"
             if not ctx.dry_run:
                 store.record_rankings(ranked, now)
             pr.threshold = hints.threshold
@@ -151,11 +185,16 @@ def run(
             kept[name] = [r for r in ranked if r.score >= hints.threshold][: hints.max_items]
             pr.kept = len(kept[name])
             pr.kept_ids = {r.id for r in kept[name]}
+            progress.line(f"→ {pr.kept} kept (threshold {hints.threshold:.0f})")
         except Exception as exc:
             ctx.log.exception("content plugin %s failed", name)
             pr.error = _error(exc)
+            progress.line(f"✗ {name} failed: {pr.error}")
+            if not ranking_started:
+                progress.step(f"Filtering & ranking {name}", "skipped")
 
     # 3. Route and publish.
+    progress.step("Outputs", "" if active else "none enabled")
     for cfg, output in active:
         orep = OutputReport(id=cfg.id, type=cfg.type)
         report.outputs.append(orep)
@@ -167,24 +206,28 @@ def run(
             if r.score >= cfg.min_score
         ]
         try:
-            candidates = [r for r in candidates if output.accepts(r)]
-            delivered = store.delivered_outputs([r.id for r in candidates])
-            to_send = [r for r in candidates if cfg.id not in delivered[r.id]]
-            orep.routed = len(to_send)
-            if not to_send:
-                continue
-            if ctx.dry_run:
-                orep.preview = output.preview(to_send, cfg, ctx)
-            else:
-                deliveries = output.publish(to_send, cfg, ctx)
-                store.record_deliveries(
-                    (
-                        Delivery(item_id=d.item_id, output_id=cfg.id, external_ref=d.external_ref)
-                        for d in deliveries
-                    ),
-                    now,
-                )
-                orep.published = len(deliveries)
+            with progress.task(cfg.id, cfg.type) as task:
+                candidates = [r for r in candidates if output.accepts(r)]
+                delivered = store.delivered_outputs([r.id for r in candidates])
+                to_send = [r for r in candidates if cfg.id not in delivered[r.id]]
+                orep.routed = len(to_send)
+                task.result = "nothing new"
+                if to_send and ctx.dry_run:
+                    orep.preview = output.preview(to_send, cfg, ctx)
+                    task.result = f"{len(to_send)} to publish"
+                elif to_send:
+                    deliveries = output.publish(to_send, cfg, ctx)
+                    store.record_deliveries(
+                        (
+                            Delivery(
+                                item_id=d.item_id, output_id=cfg.id, external_ref=d.external_ref
+                            )
+                            for d in deliveries
+                        ),
+                        now,
+                    )
+                    orep.published = len(deliveries)
+                    task.result = f"{orep.published} published"
         except Exception as exc:
             ctx.log.exception("output %s failed", cfg.id)
             orep.error = _error(exc)

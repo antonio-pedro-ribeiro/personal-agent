@@ -10,6 +10,7 @@ from personal_agent.kernel.context import RunContext
 from personal_agent.kernel.models import Interests, Item, RankHints, Source
 from personal_agent.kernel.services.extractor import ExtractionSpec
 from personal_agent.kernel.services.llm import LLMUnavailable
+from personal_agent.kernel.services.progress import items as n_items
 from personal_agent.plugins.content.events import filters
 from personal_agent.plugins.content.events.adapters import ADAPTERS, ical
 
@@ -42,7 +43,10 @@ class EventsPlugin:
         items: list[Item] = []
         for source in sources:
             try:
-                items.extend(self._collect_one(source, interests, ctx, tz, window))
+                with ctx.progress.task(source.id, source.type) as task:
+                    found = self._collect_one(source, interests, ctx, tz, window)
+                    task.result = n_items(len(found))
+                items.extend(found)
             except LLMUnavailable as exc:
                 if not getattr(ctx.llm, "unavailable", None):
                     ctx.warn(f"source '{source.id}' skipped ({exc})")
@@ -73,7 +77,7 @@ class EventsPlugin:
                         f"{', '.join(t.id for t in excluded)} (raise max_queries to include)"
                     )
                 return ctx.web.search(
-                    source, self.extraction_spec(), interests, tz, ctx.now, window
+                    source, self.extraction_spec(), interests, tz, ctx.now, window, ctx.progress
                 )
             result = ctx.web.page(source, self.extraction_spec(), tz, ctx.now)
             items = list(result.items)

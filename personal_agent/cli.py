@@ -27,6 +27,7 @@ from personal_agent.kernel.services.availability import (
 )
 from personal_agent.kernel.services.extractor import Extractor
 from personal_agent.kernel.services.http import HttpService
+from personal_agent.kernel.services.progress import Progress
 from personal_agent.kernel.services.ranker import KeywordRanker, LLMRanker, Ranker
 from personal_agent.kernel.services.store import Store, default_db_path
 
@@ -152,10 +153,17 @@ def _print_warnings(warnings: Sequence[str]) -> None:
 def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
     config = load_config(args.config_dir)
     ctx = build_context(config, args.config_dir, args.db, args.dry_run, registry)
+    ctx.progress = Progress(None if args.quiet else sys.stderr)
+    llm_name = f"{ctx.llm.provider} {ctx.llm.model}" if ctx.llm else "no LLM (keyword ranking)"
+    ctx.progress.header(
+        f"{'DRY RUN' if args.dry_run else 'Run'} — "
+        f"{ctx.now.astimezone(ctx.tz):%Y-%m-%d %H:%M %Z} · {llm_name}"
+    )
     try:
         report = runner.run(config, registry, ctx, args.plugin, args.output)
     finally:
         ctx.store.close()
+    ctx.progress.done()
     if reason := getattr(ctx.llm, "unavailable", None):
         report.warnings.append(
             f"LLM provider unavailable ({reason}): keyword ranking used, web sources skipped"
@@ -441,6 +449,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--fail-on-error",
         action="store_true",
         help="exit with code 4 if a plugin, output or feedback sync failed (for scheduled runs)",
+    )
+    run_p.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="no live progress on stderr (the summary is still printed)",
     )
     run_p.set_defaults(func=cmd_run)
 
