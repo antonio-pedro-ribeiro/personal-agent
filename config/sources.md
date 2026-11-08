@@ -10,8 +10,9 @@ One section per content plugin, one checkbox per source. Format: docs/SPEC.md §
   - fetch_pages: 2   ← listing pages opened per search (main cost driver)
 - [X] **safejourney** — web_page
   - url: https://www.safejourney.pt/eventos/   ← bare safejourney.pt has a broken TLS certificate
-- [ ] **alltera-tribe** — web_page
-  - url: TBD   ← not found by web search; add the official site or event page
+- [X] **lisboa-psychedelic-society** — ical
+  - url: https://www.meetup.com/lisboa-psychedelic-society/events/ical/   ← Meetup's iCal feed (free, no LLM)
+  - page: https://www.meetup.com/lisboa-psychedelic-society/
 - [ ] **example-ical** — ical
   - url: https://example.com/calendar.ics
 
