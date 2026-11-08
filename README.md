@@ -4,9 +4,11 @@ A personal assistant agent that researches **events** and **news** matching your
 and publishes them where you already work: Google Calendar, Google Tasks, an Obsidian vault,
 a markdown digest, or email.
 
-> **Status:** M1–M3 built: events from iCal, web pages and web search, LLM ranking on a
+> **Status:** M1–M4 built: events from iCal, web pages and web search, LLM ranking on a
 > Claude Pro/Max plan (default, via Claude Code) or a Claude / Gemini API key, a markdown
-> digest and Google Calendar suggestions. Next: feedback and scheduling (M4), news (M5) ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
+> digest and Google Calendar suggestions, feedback that steers the ranking, and daily runs in
+> GitHub Actions or the Windows Task Scheduler. Next: news and more outputs (M5)
+> ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
 
 ## Try it
 
@@ -26,6 +28,40 @@ far) and a €150 gala (over budget) are dropped. Without `--dry-run`, the diges
 
 Your own setup lives in `config/` (`PERSONAL_AGENT_CONFIG_DIR` to move it). State is kept in the
 platform data dir (`PERSONAL_AGENT_DATA_DIR`, or `--db`).
+
+## Getting started
+
+First set it up and run it by hand ([`docs/USAGE.md`](docs/USAGE.md) quickstart: install,
+`config/`, `agent auth google`, `agent run --dry-run`, `agent run`). Then pick how it runs
+every day:
+
+**Cloud mode** (GitHub Actions; none of your devices needs to stay on)
+
+1. Keep this repository **private** (it holds your interests, digests and state).
+2. Publish the Google app so the sign-in doesn't expire weekly
+   ([`docs/OPERATIONS.md`](docs/OPERATIONS.md#once-publish-the-google-app)), then run
+   `agent auth google --print-token`.
+3. Add repo secrets (*Settings → Secrets and variables → Actions*):
+   `PERSONAL_AGENT_GOOGLE_TOKEN_JSON` (the printed token) and, for the default provider,
+   `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`). For an API provider, set
+   the repo variable `PERSONAL_AGENT_LLM_PROVIDER` and that provider's key secret instead.
+4. *Actions → Agent → Run workflow* once to check it. After that it runs daily at 06:00 UTC.
+
+Results: the *Suggestions* calendar in Google Calendar, and digests in `digests/` on the
+`state` branch (tick 👍/👎 there on github.com). Config stays in `config/` on the main branch.
+
+**Windows local mode** (Task Scheduler; if the PC is off at the set time, the run starts when
+it's back on)
+
+```powershell
+pipx install C:\Git\personal-agent        # or: python -m pip install -e .
+cd C:\Users\me\personal-agent-data        # the run starts here; digests/ are written here
+agent --config-dir C:\Git\personal-agent\config schedule install --time 07:00
+agent schedule remove                     # to stop
+```
+
+Linux and macOS use the same command (cron / launchd). Output goes to a log file, whose path
+`agent schedule install` prints.
 
 ## How it works
 
@@ -92,19 +128,19 @@ Three markdown checklists. A checked box is enabled; uncheck to pause.
 
 Full format: [`docs/SPEC.md` §3](docs/SPEC.md#3-configuration-documents).
 
-## CLI (planned commands marked *)
+## CLI
 
 ```
-agent run [--plugin events|news] [--output <id>] [--dry-run]
+agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--fail-on-error]
 agent plugins
 agent sources test <id>
 agent outputs test <id>
-agent rate <item-id> up|down     *
-agent auth google
-agent schedule install|remove    *
+agent rate <item-id> up|down
+agent auth google [--print-token]
+agent schedule install [--time HH:MM] | remove
 ```
 
-## Requirements (planned)
+## Requirements
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
 - An LLM for web search / web page sources and ranking (without one, only feed sources and a

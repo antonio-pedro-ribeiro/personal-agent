@@ -10,7 +10,7 @@ Claude-subscription and Gemini providers), then news and the remaining outputs (
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal                   | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline                                                         | 2, 3, 4*, 6, 10     |
 | M2 ✅ | **Smart events in Calendar**: LLM, web sources, Google Calendar                     | Events from web search, web pages and iCal feeds, LLM-ranked, on the *Suggestions* calendar                                                          | 5, 7, 9, 12, 13, 14 |
 | M3 ✅ | **Alternative LLM providers**: Claude subscription (now the default), Gemini API & CLI | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code`, `gemini_api` or `gemini_cli` runs ranking, extraction and web search without the Claude API key | 15, 16              |
-| M4    | **Events MVP**: feedback loop + unattended runs                                     | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone                                                                  | 8, 11               |
+| M4 ✅ | **Events MVP**: feedback loop + unattended runs                                     | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone                                                                  | 8, 11               |
 | M5    | **News & more outputs**, then v1 release                                            | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0`                                                              | 1, all              |
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
@@ -37,6 +37,14 @@ rejects personal Google accounts without a Cloud project). Spike findings (recor
   request; grounding search $0.014 per query after 5,000 free a month.
 - Gemini CLI 0.36 and 0.67: `IneligibleTierError` ("no longer supported for Gemini Code Assist
   for individuals… migrate to Antigravity").
+
+✅ M4: built on 2026-11-08: calendar and digest feedback read-back, `agent rate`, feedback as
+a delimited block in the ranking prompt (AC 8 tested end to end), `agent schedule
+install|remove` (Task Scheduler XML / launchd / crontab, per-OS command generation tested),
+`agent run --fail-on-error` and `--log-file`, the cloud workflow `.github/workflows/agent.yml`
+(state branch with `agent.db` and `digests/`, run-log artifact) and actionlint in CI. **Open
+before "done when":** publish the Google app, add the repo secrets, and confirm one scheduled
+cloud run end to end from Android (AC 11), then the quality check below.
 
 Sequence: M1 → M2 → M3 → M4 → M5. Inside M5, news and the extra outputs are
 independent and can be built in either order.
@@ -212,7 +220,9 @@ URLs resolved before the link check.
 credentials set, `agent run --dry-run` on the real config ranks events and the `web` source
 finds dated events (ACs 15, 16).
 
-## M4 — Events MVP: feedback + unattended runs
+## M4 — Events MVP: feedback + unattended runs ✅
+
+> Built as planned (see the M4 note at the top); the live cloud check is pending.
 
 Goal: the agent runs by itself every day and learns from what you keep or delete.
 

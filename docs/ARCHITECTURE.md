@@ -246,7 +246,7 @@ The feedback loop is bidirectional and multi-surface:
 - **Thin-Client Philosophy**: The agent runs as a headless scheduled background process. Desktop PCs and mobile phones (Android/iOS) function as thin clients using standard apps (Google Calendar, Tasks, Obsidian, Gmail, Web).
 - **Cloud Mode (GitHub Actions)**:
   - Runs on a GitHub Actions `schedule:` cron trigger in a private repository.
-  - State (`agent.db`) is committed and pushed to an orphan `state` branch.
+  - State (`agent.db`) and the generated `digests/` are committed and pushed to an orphan `state` branch (`.github/workflows/agent.yml`).
   - Secrets and OAuth tokens are stored in GitHub Actions encrypted repository secrets.
 - **Local Mode (Windows / macOS / Linux)**:
   - Installed via `pipx`.

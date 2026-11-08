@@ -4,10 +4,11 @@ How to install, configure and run personal-agent. For recurring upkeep (re-signi
 checks, key rotation, backups), see [`OPERATIONS.md`](OPERATIONS.md). For the design, see [`SPEC.md`](SPEC.md);
 for what is built and what is next, see [`PLAN.md`](PLAN.md).
 
-> **What works today (M1–M3):** events from iCal, web pages and web search; LLM ranking on
+> **What works today (M1–M4):** events from iCal, web pages and web search; LLM ranking on
 > your Claude Pro/Max plan (default), a Claude API key, a Gemini API key, or Gemini CLI; a
-> markdown digest; suggestions in Google Calendar. **Not yet:** reading back your feedback and
-> scheduled runs (M4), news, Obsidian, Google Tasks and email (M5).
+> markdown digest; suggestions in Google Calendar; feedback (kept/deleted suggestions, ticked
+> boxes, `agent rate`) that steers the ranking; daily runs in GitHub Actions or the OS
+> scheduler. **Not yet:** news, Obsidian, Google Tasks and email (M5).
 
 ---
 
@@ -54,6 +55,7 @@ agent run
 ```
 
 To also get suggestions in Google Calendar, follow [Google Calendar setup](#google-calendar-setup).
+To run it every day by itself, see [Running every day](#running-every-day).
 
 ---
 
@@ -65,13 +67,15 @@ sources.md ───┼─► collect ─► dedupe ─► filter ─► rank �
 outputs.md ───┘
 ```
 
-1. **Collect:** every checked source is fetched.
-2. **Dedupe:** items already delivered to every output are skipped, so they cost nothing.
-3. **Filter:** deterministic rules (dates, distance, price, time windows, busy slots,
+1. **Feedback:** what you did with earlier suggestions is read back (see
+   [Feedback](#feedback)). Skipped in `--dry-run`.
+2. **Collect:** every checked source is fetched.
+3. **Dedupe:** items already delivered to every output are skipped, so they cost nothing.
+4. **Filter:** deterministic rules (dates, distance, price, time windows, busy slots,
    dislikes). No LLM.
-4. **Rank:** the LLM scores what is left from 0 to 100 against your topics and writes a
-   one-line reason. Without a key, a keyword matcher is used instead.
-5. **Route and publish:** each checked output gets the items routed to it, at most once.
+5. **Rank:** the LLM scores what is left from 0 to 100 against your topics and your
+   latest 20 feedback signals, and writes a one-line reason. Without a key, a keyword matcher is used instead.
+6. **Route and publish:** each checked output gets the items routed to it, at most once.
 
 A failing source or output is reported as a warning; the rest of the run continues.
 
@@ -178,10 +182,10 @@ not fetched, and each site gets at most one request per second.
 Settings for every output: `plugins` (which content goes there; default all) and
 `min_score` (only items scored at least this; default 0).
 
-| Type | Publishes | Settings | Feedback (M4) |
+| Type | Publishes | Settings | Feedback |
 |---|---|---|---|
 | `markdown_digest` | `<path>/YYYY-MM-DD.md`, one section per plugin (*Plan* for events), each item with 👍/👎 boxes | `path` (default `digests`, relative to where you run `agent`) | tick a box |
-| `google_calendar` | tentative, *free*-showing events on a calendar the agent creates and owns | `calendar_name` (default `Suggestions`) | keep = accept, delete = reject |
+| `google_calendar` | tentative, *free*-showing events on a calendar the agent creates and owns | `calendar_name` (default `Suggestions`) | still there after it ends = accepted, deleted = rejected |
 
 You can have several outputs of the same type, for example two digests with different
 `min_score`.
@@ -294,9 +298,64 @@ Things to know:
 
 ---
 
+## Feedback
+
+The agent learns from what you do with its suggestions. At the start of each run it reads
+back, for items delivered in the last 14 days:
+
+| Where | Signal |
+|---|---|
+| *Suggestions* calendar | event deleted → `rejected`; event still there after it ended → `accepted` |
+| Digest | `- [x] 👍` under an item → `up`; `- [x] 👎` → `down` (both ticked = ignored) |
+| Command line | `agent rate <id> up` or `down` (the `id:` shown in the digest or event description; the first 6+ characters are enough) |
+
+If you change your mind (untick 👍, tick 👎), the newest signal wins. The latest 20 signals go
+into the ranking prompt, so similar items score higher or lower next time. Untouched items
+give no signal.
+
+---
+
+## Running every day
+
+**Cloud (GitHub Actions):** the workflow [`.github/workflows/agent.yml`](../.github/workflows/agent.yml)
+runs daily at 06:00 UTC and on demand (*Actions → Agent → Run workflow*, optionally as a dry
+run). Setup is in the [README](../README.md#getting-started). Each run:
+
+- installs the agent (and Claude Code for the default provider);
+- checks out the `state` branch into `state/` and runs there, so `state/agent.db` and
+  `state/digests/` are saved back to that branch (config is read from `config/` on main);
+- runs `agent run --explain --fail-on-error` and uploads the output as the `run-log-<n>`
+  artifact (items, scores, reasons, cost);
+- fails (red, and GitHub emails you) if a plugin, output or feedback sync failed, or the LLM
+  provider wasn't available, after saving what did succeed.
+
+From a phone: see suggestions in Google Calendar; on github.com switch to the `state` branch,
+open `digests/`, edit the day's file and tick boxes; edit `config/*.md` on main; start a run
+from the Actions tab.
+
+**Local (Windows, Linux, macOS):**
+
+```powershell
+cd C:\Users\me\personal-agent-data          # the run starts here (digests/ resolve here)
+agent --config-dir C:\Git\personal-agent\config schedule install --time 07:00
+agent schedule remove
+```
+
+`install` registers one daily job: a Task Scheduler task on Windows (starts late if the PC was
+off, needs you to be logged in, no console window), a launchd agent on macOS, or a crontab
+line elsewhere. Running it again replaces the job. The job runs `agent run` with absolute paths
+and `--log-file` (default: the platform log folder, e.g.
+`%LOCALAPPDATA%\personal-agent\Logs\agent.log`; printed on install). Options: `--time HH:MM`,
+`--workdir DIR` (instead of the current folder); the global `--config-dir`, `--db` and
+`--log-file` are passed on to the job.
+
+---
+
 ## Commands
 
-Global options go before the command: `agent [--config-dir DIR] [--db FILE] [-v] <command>`.
+Global options go before the command:
+`agent [--config-dir DIR] [--db FILE] [--log-file FILE] [-v] <command>`. `--log-file` appends
+all output to that file instead of the terminal.
 
 | Command | What it does |
 |---|---|
@@ -304,10 +363,16 @@ Global options go before the command: `agent [--config-dir DIR] [--db FILE] [-v]
 | `agent run --dry-run` | same, but writes nothing (no digest, no calendar, no state); prints a preview of each output |
 | `agent run --plugin events` | only this content plugin |
 | `agent run --output calendar` | only this output |
+| `agent run --explain` | also list every ranked item with its score, reason and verdict |
+| `agent run --fail-on-error` | exit with code 4 if a plugin, output or feedback sync failed, or no LLM was available (for scheduled runs) |
+| `agent run --max-cost USD` | exit with code 3 if the run's estimated cost was above USD (checked afterwards) |
 | `agent plugins` | installed content and output plugins, and whether each is enabled |
 | `agent sources test <id>` | fetch one source and list what it returns, before filters |
 | `agent outputs test <id>` | publish one sample item to that output |
 | `agent auth google [--client-secrets FILE] [--print-token]` | connect Google; `--print-token` prints the token for cloud mode (keep it private) |
+| `agent rate <id> up\|down` | give feedback on an item by its id |
+| `agent schedule install [--time HH:MM] [--workdir DIR]` | daily run with the OS scheduler ([details](#running-every-day)) |
+| `agent schedule remove` | remove it |
 
 Each run prints what was found, filtered and kept, what each output published, the LLM
 calls and their estimated cost, and any warnings.
@@ -366,9 +431,10 @@ Gemini costs per run have not been measured live yet (no key set up). See
 | What | Where |
 |---|---|
 | Your settings | `config/*.md` |
-| Digests | `digests/` (or the output's `path`) |
-| State: seen items, rankings, deliveries, extraction cache, the Suggestions calendar id | `agent.db` in the data folder |
-| Google token | OS keyring, entry `personal-agent / google-token` |
+| Digests | `digests/` (or the output's `path`), relative to where the run starts (cloud mode: on the `state` branch) |
+| State: seen items, rankings, deliveries, feedback, extraction cache, the Suggestions calendar id | `agent.db` in the data folder (cloud mode: on the `state` branch) |
+| Google token | OS keyring, entry `personal-agent / google-token` (cloud mode: repo secret) |
+| Scheduled run log | the `--log-file` path; by default the platform log folder (`agent schedule install` prints it) |
 
 Deleting `agent.db` makes the agent forget what it already sent (expect repeats) and
 re-extract everything once. Nothing in it is needed by Google: the calendar keeps its events.
@@ -391,3 +457,6 @@ re-extract everything once. Nothing in it is needed by Google: the calendar keep
 | `Google token lacks ...` | you enabled an output needing a new permission: run `agent auth google` again |
 | Sign-in stops working after a week | the app is still in *Testing*: re-run `agent auth google`, or publish it (step 3 of the Google setup) |
 | An event shows up again after deleting `agent.db` | expected; the agent lost its memory of what it sent |
+| Ticked boxes in a digest aren't picked up | the tick must be `[x]` right under the item's line; only digests from the last 14 days are read; a digest moved out of its folder is ignored |
+| Scheduled run didn't happen (Windows) | Task Scheduler → *personal-agent* → *History*; you must be logged in; check the log file |
+| Cloud run is red | open the run and download `run-log-<n>`; its end says why (`--fail-on-error`) |

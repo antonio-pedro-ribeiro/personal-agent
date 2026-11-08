@@ -3,8 +3,9 @@
 What to do regularly to keep personal-agent working. For first-time setup, see
 [`USAGE.md`](USAGE.md).
 
-> Today you run the agent by hand (`agent run`). Scheduled, unattended runs come in M4; items
-> marked *(from M4)* only apply once that milestone is built.
+> The agent runs by itself every day, in GitHub Actions (cloud mode) or with
+> `agent schedule install` (local mode); see [USAGE → Running every day](USAGE.md#running-every-day).
+> You can still run it by hand with `agent run`.
 
 ## At a glance
 
@@ -12,13 +13,14 @@ What to do regularly to keep personal-agent working. For first-time setup, see
 |---|---|---|
 | **Every 7 days** (while the Google app is in Testing) | [Re-run `agent auth google`](#google-sign-in-every-7-days) | Google expires the sign-in of apps in Testing |
 | After every run | [Read the warnings](#after-every-run) | Broken sources and expired sign-ins show up there |
+| Daily (glance) | [Check the scheduled run](#daily-check-the-scheduled-run) | A red cloud run or a stale log means no suggestions |
 | Weekly | [Check LLM spend](#weekly-check-llm-spend) | API providers: web search is the main cost; `claude_code`: plan limits |
-| Weekly | [Give feedback](#weekly-give-feedback) | Feedback steers the ranking *(read back from M4)* |
+| Weekly | [Give feedback](#weekly-give-feedback) | Feedback steers the ranking |
 | Monthly | [Review sources and interests](#monthly-review-sources-and-interests) | Sites change, feeds move, interests drift |
 | Monthly | [Update the agent and its dependencies](#monthly-update) | Security fixes; API changes |
 | Every few months | [Rotate keys](#every-few-months-rotate-keys) | Limits the damage of a leaked key |
 | When needed | [Back up or reset state](#state-backup-and-reset) | Moving PCs, or starting fresh |
-| Once, before M4 | [Publish the Google app](#once-before-m4-publish-the-google-app) | Ends the weekly re-sign-in |
+| Once, before scheduling | [Publish the Google app](#once-publish-the-google-app) | Ends the weekly re-sign-in |
 
 ---
 
@@ -48,10 +50,10 @@ Tips:
 - Do it on a fixed day, e.g. when you plan your week; or add a weekly reminder in your calendar.
 - Also re-run it whenever you enable another Google output; the agent warns
   `Google token lacks ...` when a permission is missing.
-- Cloud mode *(from M4)*: after re-authorizing, run it with `--print-token` and paste the new
+- Cloud mode: after re-authorizing, run it with `--print-token` and paste the new
   token into the repo secret `PERSONAL_AGENT_GOOGLE_TOKEN_JSON`.
 
-This task goes away once the app is [published](#once-before-m4-publish-the-google-app).
+This task goes away once the app is [published](#once-publish-the-google-app).
 
 ## After every run
 
@@ -67,6 +69,16 @@ Each run ends with a summary and a **Warnings** list. Act on:
 | `No LLM (... not set)` / `No LLM (... not found on PATH)` | the provider's key is missing in this terminal (restart it, or set the key again), or the CLI isn't installed |
 
 A run with warnings still completes; nothing needs fixing in a hurry.
+
+## Daily: check the scheduled run
+
+- **Cloud:** GitHub emails you when the *Agent* workflow fails. Open the run, download the
+  `run-log-<n>` artifact and read the end: `--fail-on-error` lists what failed (an output, a
+  feedback sync, or no working LLM). State that did succeed is still saved to the `state`
+  branch, so a re-run (*Run workflow*) doesn't duplicate anything.
+- **Local:** look at the end of the log file (`agent schedule install` printed its path; on
+  Windows by default `%LOCALAPPDATA%\personal-agent\Logs\agent.log`). No new `===` block today
+  means the task didn't run: check Task Scheduler → *personal-agent* → *History*.
 
 ## Weekly: check LLM spend
 
@@ -85,8 +97,11 @@ A run with warnings still completes; nothing needs fixing in a hurry.
 - **Calendar:** keep suggestions you like; delete the ones you don't. Delete only in the
   *Suggestions* calendar.
 - **Digest:** tick 👍 or 👎 under items in `digests/YYYY-MM-DD.md`.
-- *(from M4)* The agent reads these back and uses them in ranking. Until then, feedback is only
-  for you, but it's a good habit to start.
+- Cloud mode: the digests are on the `state` branch on github.com; edit the file there (also
+  from a phone browser) and tick the box.
+- Or from a terminal: `agent rate <id> up|down` with the `id:` from the digest or event.
+- The next run reads these back (items from the last 14 days) and the latest 20 signals steer
+  the ranking. See [USAGE → Feedback](USAGE.md#feedback).
 
 ## Monthly: review sources and interests
 
@@ -116,11 +131,11 @@ reinstall.
 
 | Credential | Where it lives | How to rotate |
 |---|---|---|
-| Claude Code cloud token *(from M4)* | repo secret `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, update the secret |
+| Claude Code cloud token | repo secret `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, update the secret |
 | Anthropic / Gemini API key (if used) | env var `PERSONAL_AGENT_ANTHROPIC_API_KEY` / `PERSONAL_AGENT_GEMINI_API_KEY` | create a new key in the Console, `setx` it, restart the terminal, run once, then delete the old key |
 | Google OAuth client | `C:\Users\anton\.config\personal-agent\client_secret.json` | rarely needed; to replace it, create a new Desktop client in Google Cloud, save the JSON there, re-run `agent auth google`, delete the old client |
 | Google sign-in token | Windows Credential Manager (`personal-agent` / `google-token`) | re-running `agent auth google` replaces it |
-| Cloud secrets *(from M4)* | GitHub repo secrets | update them whenever you rotate the local ones |
+| Cloud secrets | GitHub repo secrets | update them whenever you rotate the local ones |
 
 Rotate immediately if a key may have leaked (pasted somewhere, committed, shared screen).
 
@@ -137,13 +152,17 @@ The agent's memory is one file: `agent.db` in `%LOCALAPPDATA%\personal-agent\` (
   forgets what it already sent and suggests things again.
 - **Reset:** delete `agent.db`. Next run re-extracts every page once (a little LLM cost) and may
   repeat suggestions. Calendar events already created stay in Google.
-- **Digests:** `digests/` grows by one file per day; delete old ones whenever you like.
+- **Digests:** `digests/` grows by one file per day; delete old ones whenever you like (feedback
+  is only read from the last 14 days).
+- **Cloud mode:** state is `agent.db` and `digests/` on the `state` branch. Back up by fetching
+  that branch. Reset by deleting the branch (`git push origin --delete state`); the next run
+  starts a fresh one.
 - **Suggestions calendar:** delete old events freely. If you delete the whole calendar, the
   agent creates a new one on the next run.
 
-## Once, before M4: publish the Google app
+## Once: publish the Google app
 
-Scheduled runs can't click through a browser every week, so before M4:
+Scheduled runs can't click through a browser every week, so before scheduling:
 
 1. Have a public **home page** and **privacy policy** URL for the app (for example, a public
    repo with a `PRIVACY.md`).
