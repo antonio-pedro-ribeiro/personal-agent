@@ -52,3 +52,12 @@ def test_plugins_and_sources_test(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "demo-venues (ical):" in out and "before filters" in out
     assert main(["--config-dir", str(DEMO), "sources", "test", "nope"]) == 2
+
+
+def test_auth_and_outputs_test_fail_clearly(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("PERSONAL_AGENT_GOOGLE_CLIENT_SECRETS", raising=False)
+    assert main(["--config-dir", str(DEMO), "auth", "google"]) == 2
+    assert "OAuth client file" in capsys.readouterr().err
+    assert main(["--config-dir", str(DEMO), "outputs", "test", "nope"]) == 2

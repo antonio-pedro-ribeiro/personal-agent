@@ -9,11 +9,15 @@ on Ubuntu and Windows.
 | # | Milestone | Result | Spec ACs |
 |---|---|---|---|
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
-| M2 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
+| M2 🟡 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
 | M3 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
 | M4 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
+
+🟡 M2: code and offline tests done; LLM ranking, `web_search` and the safejourney source verified
+live. Waiting on: a real Google sign-in (`agent auth google`) to verify the Calendar output, and
+the AllTera Tribe URL.
 
 Sequence: M1 → M2 → M3 → M4. Inside M4, news and the extra outputs are
 independent and can be built in either order.

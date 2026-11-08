@@ -67,8 +67,8 @@ returns schema-validated `Item`s.
 
 | Adapter | What it does | Cost / limits |
 |---|---|---|
-| `web_search` | For each enabled topic routed to the plugin, the Extractor runs a Claude request with the server-side web search tool (e.g. "jazz concerts Lisbon next 14 days") and extracts items from the results. Optional `allowed_domains`, `max_queries` per run (default 5). | ~$10 per 1,000 searches plus tokens; needs `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
-| `web_page` | Fetches `url` (and optional `pages:` subpaths). **Feed discovery first:** if the page links an RSS/Atom or `.ics` feed, it is parsed directly with no LLM. Otherwise the HTML is reduced to text and the Extractor pulls items out. Content hash cached: an unchanged page costs no LLM call. | one LLM call per changed page; respects `robots.txt`; 1 request/s per host |
+| `web_search` | For each enabled topic routed to the plugin (highest weight first, at most `max_queries`, default 3), the Extractor runs one Claude request with the server-side web search tool (one search) and the web fetch tool (up to `fetch_pages` result pages, default 2), and extracts items. Snippets rarely contain dates, so without fetching few dated events are found. Optional `allowed_domains`, `query` template. Items must link to a site the search or fetch returned. | measured with Opus 5.5: ~$0.10 per query without fetching, ~$0.30–0.45 with 2 fetched pages; needs `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
+| `web_page` | Fetches `url`. **Feed discovery first** (`feed: auto`; or `none`, or an explicit feed URL): an advertised `.ics` feed is parsed by the plugin's iCal adapter with no LLM; an RSS/Atom feed (preferring the feed under the page's own path, e.g. a WordPress category feed; comment feeds ignored) has its entries from the last 60 days extracted, because entries are articles whose event dates are in the text. Otherwise the HTML is reduced to text and extracted. Results are cached per document hash (including empty results), so unchanged entries and pages cost no LLM call. | one batched LLM call per run with new or changed documents; respects `robots.txt`; 1 request/s per host |
 
 Rules: fetched pages and search results are untrusted data, passed to the LLM in delimited
 blocks with an instruction to ignore embedded instructions; every extracted item must carry a
@@ -451,24 +451,28 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 8. Feedback from each output with feedback support (calendar delete, task complete/delete,
    ticked box in digest or Obsidian note) is recorded on the next run and appears in the next
    ranking prompt.
-9. Cost per daily run < $0.25 at ≤ 200 candidates, including ≤ 5 web searches and ≤ 3
-   changed pages extracted.
+9. Every run reports its LLM usage and estimated cost. *(Open, see §10: the original target of
+   < $0.25 per run is met without `web_search`, but one web-search query with page fetching
+   costs ~$0.30–0.45 on Opus 5.5.)*
 10. The test suite passes on Windows and Linux in CI.
 11. In cloud mode, the full loop works from an Android phone alone using the Calendar app and
     a browser.
 12. The Google token holds only the scopes required by enabled outputs plus
     `calendar.freebusy`.
-13. A `web_page` source whose page is unchanged since the last run makes no LLM call, and a
-    page that links an RSS/iCal feed is parsed without the LLM.
+13. A `web_page` source whose page or feed entries are unchanged since the last run makes no
+    LLM call, and a page that links an iCal feed is parsed without the LLM.
 14. Text such as "ignore previous instructions" inside a fetched page or search result has no
     effect on extraction or ranking (fixture test).
 
 ## 10. Open questions
 - Which outputs to enable by default: digest only, or digest + calendar?
 - Home city and initial interests.
-- AllTera Tribe: official URL? (Neither it nor safejourney.pt could be verified while writing
-  this spec.) Do either publish an RSS/iCal feed or an Instagram/Facebook-only calendar? Social
-  media pages are not fetchable without login and are out of scope.
+- AllTera Tribe: official URL? Not found by web search; the source stays disabled until known.
+  (safejourney.pt was verified in M2: a WordPress magazine with an *eventos* RSS feed, mostly
+  reports on past events; only `www.` has a valid TLS certificate.) Social media pages are not
+  fetchable without login and are out of scope.
+- Cost of `web_search`: keep Opus 5.5 with a small `max_queries`, run web search weekly only,
+  or use a cheaper model (`PERSONAL_AGENT_MODEL`) for extraction?
 - Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
   cloud mode; otherwise use Windows local mode.)
 - Obsidian: is the vault git-synced (cloud mode works) or Obsidian Sync-only (local mode)?

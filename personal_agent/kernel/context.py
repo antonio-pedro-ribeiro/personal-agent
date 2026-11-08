@@ -8,8 +8,11 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from personal_agent.kernel.adapters.web import WebSources
 from personal_agent.kernel.services.availability import Availability
+from personal_agent.kernel.services.google import GoogleService
 from personal_agent.kernel.services.http import Http
+from personal_agent.kernel.services.llm import LLM
 from personal_agent.kernel.services.ranker import Ranker
 from personal_agent.kernel.services.store import Store
 
@@ -24,6 +27,9 @@ class RunContext:
     tz: ZoneInfo
     config_dir: Path
     dry_run: bool = False
+    web: WebSources | None = None  # generic web_page / web_search adapters
+    google: GoogleService | None = None  # None until `agent auth google` has been run
+    llm: LLM | None = None  # for usage/cost reporting only; plugins never call it
     plugin_titles: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     log: logging.Logger = field(default_factory=lambda: logging.getLogger("personal_agent"))

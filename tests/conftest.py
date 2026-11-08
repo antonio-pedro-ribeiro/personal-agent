@@ -24,6 +24,18 @@ from personal_agent.kernel.services.ranker import KeywordRanker
 from personal_agent.kernel.services.store import Store
 
 NOW = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)  # a Sunday
+
+
+@pytest.fixture(autouse=True)
+def _no_real_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never use real keys, the OS keyring or Google (AGENTS.md: no network)."""
+    from personal_agent.kernel.services import google
+
+    for name in ("PERSONAL_AGENT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY", google.TOKEN_ENV):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(google, "load_token", lambda: (None, "test"))
+
+
 LISBON = ZoneInfo("Europe/Lisbon")
 
 

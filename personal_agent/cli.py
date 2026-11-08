@@ -1,24 +1,32 @@
-"""Command-line interface: ``agent run | plugins | sources test``."""
+"""Command-line interface: ``agent run | plugins | sources test | outputs test | auth google``."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from personal_agent import __version__
 from personal_agent.kernel import runner
+from personal_agent.kernel.adapters.web import WebSources
 from personal_agent.kernel.config import default_config_dir, load_config
 from personal_agent.kernel.context import RunContext
-from personal_agent.kernel.models import Config
+from personal_agent.kernel.models import Config, RankedItem, make_item_id
 from personal_agent.kernel.plugin import Registry, discover
-from personal_agent.kernel.services.availability import NoAvailability
+from personal_agent.kernel.services import google, llm
+from personal_agent.kernel.services.availability import (
+    Availability,
+    GoogleAvailability,
+    NoAvailability,
+)
+from personal_agent.kernel.services.extractor import Extractor
 from personal_agent.kernel.services.http import HttpService
-from personal_agent.kernel.services.ranker import KeywordRanker
+from personal_agent.kernel.services.ranker import KeywordRanker, LLMRanker, Ranker
 from personal_agent.kernel.services.store import Store, default_db_path
 
 
@@ -30,19 +38,80 @@ def _setup_stdout() -> None:
             reconfigure(encoding="utf-8", errors="replace")
 
 
+def google_output_scopes(config: Config, registry: Registry) -> list[str]:
+    scopes: list[str] = []
+    for cfg in config.outputs:
+        output = registry.outputs.get(cfg.type)
+        if cfg.enabled and output is not None:
+            scopes.extend(output.google_scopes)
+    return scopes
+
+
 def build_context(
-    config: Config, config_dir: Path, db: Path | str, dry_run: bool, now: datetime | None = None
+    config: Config,
+    config_dir: Path,
+    db: Path | str,
+    dry_run: bool,
+    registry: Registry | None = None,
+    now: datetime | None = None,
+    use_llm: bool = True,
+    use_google: bool = True,
 ) -> RunContext:
     tz = ZoneInfo(config.interests.profile.timezone)
-    return RunContext(
-        store=Store(db),
-        ranker=KeywordRanker(),
-        availability=NoAvailability(),
-        http=HttpService(base_dir=config_dir),
+    store = Store(db)
+    http = HttpService(base_dir=config_dir)
+    warnings: list[str] = []
+
+    model = llm.from_env() if use_llm else None
+    ranker: Ranker = LLMRanker(model) if model else KeywordRanker()
+    if model is None and use_llm:
+        warnings.append(f"{llm.API_KEY_ENV} not set: keyword ranking only, web sources skipped")
+
+    google_service: google.GoogleService | None = None
+    availability: Availability = NoAvailability()
+    if use_google:
+        needed = google_output_scopes(config, registry) if registry else []
+        try:
+            google_service = google.from_saved()
+        except Exception as exc:
+            warnings.append(f"Google connection failed ({type(exc).__name__}: {exc})")
+        if google_service is None and needed:
+            warnings.append("Google is not connected: run `agent auth google`")
+        if google_service is not None:
+            if missing := google_service.missing(google.required_scopes(needed)):
+                warnings.append(
+                    f"Google token lacks {', '.join(missing)}: run `agent auth google` again"
+                )
+            availability = GoogleAvailability(google_service)
+
+    ctx = RunContext(
+        store=store,
+        ranker=ranker,
+        availability=availability,
+        http=http,
         now=now or datetime.now(UTC),
         tz=tz,
         config_dir=config_dir,
         dry_run=dry_run,
+        web=WebSources(http, Extractor(model, store) if model else None),
+        google=google_service,
+        llm=model,
+    )
+    for w in warnings:
+        ctx.warn(w)
+    return ctx
+
+
+def _cost_line(ctx: RunContext) -> str | None:
+    model = ctx.llm
+    if model is None or not model.usage.calls:
+        return None
+    u = model.usage
+    cost = u.cost_usd(model.model)
+    money = f"~${cost:.3f}" if cost is not None else "cost unknown for this model"
+    return (
+        f"LLM: {model.model}, {u.calls} call(s), {u.input_tokens:,} in / "
+        f"{u.output_tokens:,} out tokens, {u.web_searches} web search(es), {money}"
     )
 
 
@@ -55,11 +124,12 @@ def _print_warnings(warnings: Sequence[str]) -> None:
 
 def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
     config = load_config(args.config_dir)
-    ctx = build_context(config, args.config_dir, args.db, args.dry_run)
+    ctx = build_context(config, args.config_dir, args.db, args.dry_run, registry)
     try:
         report = runner.run(config, registry, ctx, args.plugin, args.output)
     finally:
         ctx.store.close()
+    report.warnings += getattr(ctx.ranker, "errors", [])
 
     mode = "DRY RUN (nothing written)" if args.dry_run else "Run"
     print(f"{mode} — {ctx.now.astimezone(ctx.tz):%Y-%m-%d %H:%M %Z}")
@@ -78,6 +148,8 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
         else:
             status = f"{o.published} item(s) published"
         print(f"  ({o.id}) {status}")
+    if cost := _cost_line(ctx):
+        print(f"  {cost}")
     for o in report.outputs:
         if o.preview:
             print(f"\n--- preview: {o.id} ---\n{o.preview}")
@@ -111,13 +183,76 @@ def cmd_sources_test(args: argparse.Namespace, registry: Registry) -> int:
     if plugin is None:
         print(f"No content plugin installed for section '{source.plugin}'", file=sys.stderr)
         return 2
-    ctx = build_context(config, args.config_dir, ":memory:", dry_run=True)
-    items = plugin.collect([source], config.interests.for_plugin(source.plugin), ctx)
+    ctx = build_context(config, args.config_dir, args.db, dry_run=True, use_google=False)
+    try:
+        items = plugin.collect([source], config.interests.for_plugin(source.plugin), ctx)
+    finally:
+        ctx.store.close()
     print(f"{source.id} ({source.type}): {len(items)} item(s), before filters")
     for item in items:
         when = f"{item.start.astimezone(ctx.tz):%Y-%m-%d %H:%M}  " if item.start else ""
-        print(f"  {when}{item.title}  {item.url}")
+        where = f"  @ {item.location}" if item.location else ""
+        print(f"  {when}{item.title}{where}\n      {item.url}")
+    if cost := _cost_line(ctx):
+        print(cost)
     _print_warnings(ctx.warnings)
+    return 0
+
+
+def cmd_outputs_test(args: argparse.Namespace, registry: Registry) -> int:
+    """Publish one sample item (tomorrow 20:00) to an output, inside its own namespace."""
+    config = load_config(args.config_dir)
+    cfg = next((o for o in config.outputs if o.id == args.output_id), None)
+    if cfg is None:
+        print(f"Unknown output '{args.output_id}'", file=sys.stderr)
+        return 2
+    output = registry.outputs.get(cfg.type)
+    if output is None:
+        print(f"Output type '{cfg.type}' is not installed", file=sys.stderr)
+        return 2
+    ctx = build_context(
+        config, args.config_dir, args.db, dry_run=False, registry=registry, use_llm=False
+    )
+    start = datetime.combine(ctx.today + timedelta(days=1), time(20), ctx.tz)
+    item = RankedItem(
+        id=make_item_id("outputs-test", cfg.id, start.isoformat()),
+        plugin="test",
+        title="personal-agent test event",
+        url="https://github.com/antonio-pedro-ribeiro/personal-agent",
+        source_id="outputs-test",
+        summary="Sample item from `agent outputs test`. Safe to delete.",
+        start=start,
+        end=start + timedelta(hours=1),
+        score=100,
+        reason="Test of the output; delete it whenever you like.",
+    )
+    ctx.plugin_titles = {"test": "Test"}
+    try:
+        deliveries = output.publish([item], cfg, ctx)
+    finally:
+        ctx.store.close()
+    for d in deliveries:
+        print(f"Published to '{cfg.id}': {d.external_ref}")
+    _print_warnings(ctx.warnings)
+    return 0
+
+
+def cmd_auth_google(args: argparse.Namespace, registry: Registry) -> int:
+    config = load_config(args.config_dir)
+    secrets = args.client_secrets or os.environ.get(google.CLIENT_SECRETS_ENV)
+    if not secrets or not Path(secrets).is_file():
+        print(
+            "Need the OAuth client file (Desktop app) from Google Cloud Console: pass "
+            f"--client-secrets PATH or set {google.CLIENT_SECRETS_ENV}.",
+            file=sys.stderr,
+        )
+        return 2
+    scopes = google.required_scopes(google_output_scopes(config, registry))
+    print("Requesting access to:\n" + "\n".join(f"  - {s}" for s in scopes))
+    token = google.authorize(Path(secrets), scopes)
+    print(f"Saved to the OS keyring ({google.KEYRING_SERVICE} / {google.KEYRING_USER}).")
+    if args.print_token:
+        print(f"\nToken JSON for the {google.TOKEN_ENV} secret (keep it private):\n{token}")
     return 0
 
 
@@ -148,6 +283,21 @@ def build_parser() -> argparse.ArgumentParser:
     test_p = sources_sub.add_parser("test", help="fetch one source and list what it returns")
     test_p.add_argument("source_id")
     test_p.set_defaults(func=cmd_sources_test)
+
+    outputs_p = sub.add_parser("outputs", help="output tools")
+    outputs_sub = outputs_p.add_subparsers(dest="outputs_command", required=True)
+    otest_p = outputs_sub.add_parser("test", help="publish one sample item to an output")
+    otest_p.add_argument("output_id")
+    otest_p.set_defaults(func=cmd_outputs_test)
+
+    auth_p = sub.add_parser("auth", help="connect accounts")
+    auth_sub = auth_p.add_subparsers(dest="auth_command", required=True)
+    google_p = auth_sub.add_parser("google", help="one-time Google consent in the browser")
+    google_p.add_argument("--client-secrets", help="OAuth client JSON (Desktop app)")
+    google_p.add_argument(
+        "--print-token", action="store_true", help="also print the token for cloud mode"
+    )
+    google_p.set_defaults(func=cmd_auth_google)
     return parser
 
 

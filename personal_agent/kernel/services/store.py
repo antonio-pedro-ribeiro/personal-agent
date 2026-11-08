@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from platformdirs import user_data_dir
 
@@ -40,6 +41,19 @@ MIGRATIONS: list[str] = [
         signal TEXT NOT NULL,
         at TEXT NOT NULL,
         UNIQUE (item_id, output_id, signal)
+    );
+    """,
+    """
+    CREATE TABLE extractions (
+        doc_hash TEXT NOT NULL,
+        plugin TEXT NOT NULL,
+        json TEXT NOT NULL,
+        at TEXT NOT NULL,
+        PRIMARY KEY (doc_hash, plugin)
+    );
+    CREATE TABLE kv (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
     );
     """,
 ]
@@ -158,3 +172,31 @@ class Store:
             (plugin, limit),
         )
         return [(Item(**json.loads(r["json"])), r["signal"]) for r in rows]
+
+    # --- extraction cache ---------------------------------------------------------------
+
+    def get_extraction(self, doc_hash: str, plugin: str) -> list[dict[str, Any]] | None:
+        row = self.conn.execute(
+            "SELECT json FROM extractions WHERE doc_hash = ? AND plugin = ?", (doc_hash, plugin)
+        ).fetchone()
+        return None if row is None else list(json.loads(row["json"]))
+
+    def put_extraction(
+        self, doc_hash: str, plugin: str, items: list[dict[str, Any]], now: datetime
+    ) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO extractions (doc_hash, plugin, json, at)"
+                " VALUES (?, ?, ?, ?)",
+                (doc_hash, plugin, json.dumps(items), _iso(now)),
+            )
+
+    # --- key/value (e.g. ids of containers an output created) ---------------------------
+
+    def get_kv(self, key: str) -> str | None:
+        row = self.conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return None if row is None else str(row["value"])
+
+    def set_kv(self, key: str, value: str) -> None:
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)", (key, value))

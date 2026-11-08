@@ -9,8 +9,13 @@ description = "Personal agent that finds events and news for you and publishes t
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.6",
+    "feedparser>=6.0",
+    "google-api-python-client>=2.100",
+    "google-auth-oauthlib>=1.2",
     "httpx>=0.27",
     "icalendar>=6.0",
+    "keyring>=25.0",
     "platformdirs>=4.0",
     "pydantic>=2.7",
     "recurring-ical-events>=3.0",
@@ -33,6 +38,7 @@ events = "personal_agent.plugins.content.events.plugin:EventsPlugin"
 
 [project.entry-points."personal_agent.outputs"]
 markdown_digest = "personal_agent.plugins.outputs.markdown_digest:MarkdownDigestOutput"
+google_calendar = "personal_agent.plugins.outputs.google_calendar:GoogleCalendarOutput"
 
 [tool.hatch.build.targets.wheel]
 packages = ["personal_agent"]
@@ -53,7 +59,10 @@ packages = ["personal_agent"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["icalendar.*", "recurring_ical_events.*"]
+module = [
+    "icalendar.*", "recurring_ical_events.*", "feedparser.*", "googleapiclient.*",
+    "google_auth_oauthlib.*", "google.*", "keyring.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
