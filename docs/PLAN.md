@@ -4,20 +4,18 @@ Builds [`SPEC.md`](SPEC.md) in **four milestones**: events end-to-end first (M1�
 and the remaining outputs (M4). Every milestone ends in something runnable, with tests passing
 on Ubuntu and Windows.
 
-Effort assumes one developer working with a coding agent.
-
 ## Overview
 
-| # | Milestone | Effort | Result | Spec ACs |
-|---|---|---|---|---|
-| M1 | **Foundation**: scaffold, kernel, digest output, events from iCal | 7–9 days | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
-| M2 | **Smart events in Calendar**: LLM, web sources, Google Calendar | 8–10 days | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
-| M3 | **Events MVP**: feedback loop + unattended runs | 4–6 days | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
-| M4 | **News & more outputs**, then v1 release | 7–10 days | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
+| # | Milestone | Result | Spec ACs |
+|---|---|---|---|
+| M1 | **Foundation**: scaffold, kernel, digest output, events from iCal | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
+| M2 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
+| M3 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
+| M4 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
 
-Sequence: M1 → M2 → M3 → **review gate** → M4. Inside M4, news and the extra outputs are
+Sequence: M1 → M2 → M3 → M4. Inside M4, news and the extra outputs are
 independent and can be built in either order.
 
 ## Before starting (owner: you)
@@ -33,7 +31,7 @@ independent and can be built in either order.
 
 ---
 
-## M1 — Foundation (7–9 days)
+## M1 — Foundation
 Goal: the whole pipeline works offline with a real content plugin and output, without any
 LLM or Google dependency.
 
@@ -73,10 +71,10 @@ recurring, DST boundary); a table-driven test per filter.
 **Done when:** `pipx install .` works on Windows, CI is green on both OSes, and `agent run
 --dry-run` prints a digest of filtered events from a fixture iCal source.
 
-## M2 — Smart events in Calendar (8–10 days)
+## M2 — Smart events in Calendar
 Goal: real event discovery from the web, LLM ranking, and suggestions in Google Calendar.
 
-**Spike first (½ day):** fetch safejourney.pt and the AllTera Tribe site and record fixtures;
+**Spike first:** fetch safejourney.pt and the AllTera Tribe site and record fixtures;
 check for feeds, JavaScript-only rendering, login walls. If events render only with
 JavaScript, decide: a Playwright fetch mode (new dependency, needs a spec change) or drop the
 source in favour of `web_search` with `allowed_domains`.
@@ -109,7 +107,7 @@ fake Google client for idempotency, namespace and scopes (ACs 5, 7, 12); busy-sl
 **Done when:** a real run shows LLM-ranked events from all three sources on the *Suggestions*
 calendar on your phone, with no overlap with busy slots.
 
-## M3 — Events MVP: feedback + unattended runs (4–6 days)
+## M3 — Events MVP: feedback + unattended runs
 Goal: the agent runs by itself every day and learns from what you keep or delete.
 
 **Feedback loop**
@@ -128,12 +126,14 @@ Goal: the agent runs by itself every day and learns from what you keep or delete
 **Tests:** deleted fake calendar event → `rejected`; ticked fixture digest → `up`; feedback in
 the ranking prompt (AC 8); actionlint in CI; scheduler command generation per OS.
 
-**Done when:** one week of unattended daily runs, used from Android only (AC 11).
+**Done when:** a scheduled run (not a manual one) completes unattended and its results can
+be seen and given feedback from Android alone (AC 11).
 
-**Review gate:** check pick quality, cost per run (AC 9 is likely tight with 5 web searches)
-and extraction errors before starting M4.
+**Quality check (does not block M4):** after a few days of scheduled runs, review pick
+quality, cost per run (AC 9 is likely tight with 5 web searches) and extraction errors, and
+tune prompts, thresholds or `max_queries`.
 
-## M4 — News, more outputs, v1 release (7–10 days)
+## M4 — News, more outputs, v1 release
 Goal: complete the spec.
 
 **News plugin**
