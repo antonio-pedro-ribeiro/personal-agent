@@ -18,5 +18,8 @@ token*.json
 credentials*.json
 out/
 
+# Generated output / local run artifacts (not fixtures) — see docs/SPEC.md §1
+digests/
+
 # Claude Code personal settings
-.claude/settings.local.json
+.claude/
