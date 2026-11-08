@@ -115,6 +115,7 @@ agent schedule install|remove    *
 ## Docs
 
 - [`docs/USAGE.md`](docs/USAGE.md): quickstart, configuration reference, commands, costs, troubleshooting
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md): recurring tasks (Google re-sign-in, spend checks, key rotation, backups)
 - [`docs/SPEC.md`](docs/SPEC.md): architecture, user stories, config format, acceptance criteria
 - [`docs/PLAN.md`](docs/PLAN.md): implementation milestones (events first, then news)
 - [`AGENTS.md`](AGENTS.md): guidance for coding agents working in this repo

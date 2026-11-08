@@ -1,6 +1,7 @@
 # Usage
 
-How to install, configure and run personal-agent. For the design, see [`SPEC.md`](SPEC.md);
+How to install, configure and run personal-agent. For recurring upkeep (re-signing in to Google, spend
+checks, key rotation, backups), see [`OPERATIONS.md`](OPERATIONS.md). For the design, see [`SPEC.md`](SPEC.md);
 for what is built and what is next, see [`PLAN.md`](PLAN.md).
 
 > **What works today (M1 + M2):** events from iCal, web pages and web search; LLM ranking
