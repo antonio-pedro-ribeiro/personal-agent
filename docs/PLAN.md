@@ -1,7 +1,7 @@
 # Implementation Plan
 
 Builds [`SPEC.md`](SPEC.md) in **five milestones**: events end-to-end first (M1–M4, with M3 adding
-the option to run on a Claude subscription), then news and the remaining outputs (M5). Every milestone ends in something runnable, with tests passing
+Claude-subscription and Gemini providers), then news and the remaining outputs (M5). Every milestone ends in something runnable, with tests passing
 on Ubuntu and Windows.
 
 ## Overview
@@ -10,7 +10,7 @@ on Ubuntu and Windows.
 |---|---|---|---|
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
 | M2 🟡 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
-| M3 | **Claude subscription option**: Claude Code as an alternative LLM provider | `PERSONAL_AGENT_LLM_PROVIDER=claude_code` runs ranking, extraction and web search on your Claude Pro/Max plan instead of an API key | 15 |
+| M3 | **Alternative LLM providers**: Claude subscription, Gemini API, Gemini subscription | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code`, `gemini_api` or `gemini_cli` runs ranking, extraction and web search without the Claude API key | 15, 16 |
 | M4 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
 | M5 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
 
@@ -31,7 +31,7 @@ independent and can be built in either order.
 | M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
 | M2 | Home city, timezone, initial topics for `interests.md` |
 | M2 | Google Cloud project with Calendar API enabled and an OAuth client of type **Desktop app**. Set the consent screen to **In production** (unverified is fine for personal use; you'll see a warning screen). In **Testing** status Google expires refresh tokens after 7 days, which would break scheduled runs. |
-| M3 | Claude Code installed and signed in with your subscription (`claude`, then `/login`); for cloud mode, a token from `claude setup-token` |
+| M3 | Whichever providers you want: Claude Code signed in with your subscription (`claude`, then `/login`; for cloud, `claude setup-token`); a Gemini API key from Google AI Studio; Gemini CLI signed in with your Google account |
 | M4 | Decide: cloud mode (private repo OK?) and/or Windows local mode |
 | M5 | Obsidian vault path and how it syncs (git or Obsidian Sync) |
 
@@ -113,51 +113,68 @@ fake Google client for idempotency, namespace and scopes (ACs 5, 7, 12); busy-sl
 **Done when:** a real run shows LLM-ranked events from all three sources on the *Suggestions*
 calendar on your phone, with no overlap with busy slots.
 
-## M3 — Claude subscription option
-Goal: run the agent's LLM work on a Claude Pro/Max subscription through Claude Code, as an
-alternative to a pay-per-use API key. The API stays the default and remains supported.
+## M3 — Alternative LLM providers: Claude subscription and Gemini
+Goal: besides the pay-per-use Claude API (default, done in M2), run the agent's LLM work on
+- a **Claude Pro/Max subscription** through Claude Code (`claude_code`),
+- **Gemini by API key** through the Google Gen AI SDK (`gemini_api`),
+- a **Google subscription or free quota** through Gemini CLI (`gemini_cli`).
+
+**Spike first** (recorded fixtures for every finding):
+- Claude Code and Gemini CLI: flags for non-interactive JSON output, tool allowlists (search and
+  fetch only), model selection; how logged-out and usage-limit states are reported; whether
+  `gemini_cli` can authenticate in GitHub Actions with a subscription.
+- Gemini API: default model; whether JSON schema output and Google Search grounding work in the
+  same request (else two calls: grounded search, then structured extraction); format of
+  grounding source URLs; measured cost of one ranking call and one search query.
 
 **Provider setting**
-- `PERSONAL_AGENT_LLM_PROVIDER`: `anthropic_api` (default) or `claude_code`. `llm.from_env()`
-  picks the implementation; Ranker, Extractor and plugins are unchanged (same `LLM` interface).
+- `PERSONAL_AGENT_LLM_PROVIDER`: `anthropic_api` (default), `claude_code`, `gemini_api` or
+  `gemini_cli`. `llm.from_env()` picks the implementation; Ranker, Extractor and plugins are
+  unchanged (same `LLM` interface).
+- `PERSONAL_AGENT_MODEL` per vendor (each provider has a default); `PERSONAL_AGENT_EFFORT` mapped
+  to the vendor's reasoning control where available.
 
-**`ClaudeCodeLLM`** (`kernel/services/llm_claude_code.py`)
-- Calls the Claude Code CLI non-interactively (`claude -p`) as a subprocess with a timeout,
-  passing the system prompt and the untrusted content the same way as the API path.
-- Asks for JSON matching the pydantic schema, validates it, and retries once with the
-  validation error if the output is invalid.
-- Web search: allows only Claude Code's built-in web search and web fetch tools, capped by the
-  same `max_queries` / `fetch_pages` budget; no file, shell or other tools.
-- Collects the URLs that the search and fetch tools returned (from the CLI's JSON/stream output)
-  so the Extractor's same-site link check still applies; if they can't be read, items need a
-  URL on a site named in the answer's sources, otherwise they are dropped.
-- Model from `PERSONAL_AGENT_MODEL` when set; otherwise Claude Code's default.
-- Cost line reports calls and duration instead of dollars ("included in your plan").
-- Spike first: confirm which CLI flags the installed Claude Code version supports for
-  non-interactive JSON output, tool allowlists and model selection, and how usage limits are
-  reported; record CLI output fixtures for the tests.
+**Shared pieces** (`kernel/services/llm_common.py`)
+- JSON-from-text parsing, pydantic validation and one retry with the validation error, for
+  providers that can't enforce a schema.
+- A subprocess runner for CLI providers: timeout, clean environment (no API keys), output
+  capture, mapping of "not logged in" / "limit reached" to clear errors.
+- Search-URL normalisation: resolve redirect URLs (e.g. Gemini grounding links) with HEAD
+  requests before the Extractor's same-site check.
+- Usage reporting: dollars for API providers, "calls + duration, included in plan" for CLIs.
 
-**Credentials**
-- Local: the Claude Code login on this machine (`claude`, then `/login` with the subscription).
-- Cloud: `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (created with `claude setup-token`), passed to
-  the subprocess as Claude Code's token variable; the generic name is never read from the
-  user's environment.
-- Never mix: with `claude_code`, `PERSONAL_AGENT_ANTHROPIC_API_KEY` is ignored, and the API key
-  is not passed to the subprocess, so a run can't silently fall back to paid API usage.
+**`ClaudeCodeLLM`** (`llm_claude_code.py`)
+- `claude -p` with only web search and web fetch allowed, capped by `max_queries` /
+  `fetch_pages`; result URLs read from the CLI's JSON/stream output.
+- Credentials: local Claude Code login; cloud `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from
+  `claude setup-token`), passed to the subprocess as Claude Code's own token variable.
 
-**Failure handling**
-- CLI missing, not logged in, or usage limit reached → a clear warning; ranking falls back to
-  keywords and web sources are skipped for that run, as without an API key.
+**`GeminiApiLLM`** (`llm_gemini_api.py`)
+- `google-genai` client with `PERSONAL_AGENT_GEMINI_API_KEY` passed explicitly; JSON output with
+  the pydantic schema; Google Search grounding (and URL context, for `fetch_pages`) for web
+  search; source URLs from grounding metadata; token usage and cost per run.
+- Safety blocks and empty candidates reported as clear errors (like Claude refusals).
 
-**Docs:** USAGE.md section "Using a Claude subscription" (install, login, setting, limits,
-terms: personal use only).
+**`GeminiCliLLM`** (`llm_gemini_cli.py`)
+- `gemini -p` with only its Google Search and web fetch tools; JSON validated as above.
+- Credentials: local Gemini CLI login with a Google account. Cloud mode only if the spike finds a
+  supported way; otherwise documented as local-only (use `gemini_api` in the cloud).
 
-**Tests:** a fake `claude` executable (or injected runner) returning recorded outputs: valid
-JSON, invalid then valid (retry), not-logged-in, usage-limit, timeout; provider selection from
-env; the API key is not in the subprocess environment.
+**Failure handling:** missing credentials, logged-out CLI, quota or usage limit → a clear warning;
+ranking falls back to keywords and web sources are skipped for that run.
 
-**Done when:** with `PERSONAL_AGENT_LLM_PROVIDER=claude_code` and no API key set,
-`agent run --dry-run` on the real config ranks events and the `web` source finds dated events.
+**Docs:** USAGE.md "Choosing an LLM provider" (setup per provider, comparison, limits, data-use
+and terms notes).
+
+**Tests:** provider-contract tests run the same documents through each provider with faked
+vendor responses (SDK fakes for `gemini_api`, a fake executable for the CLIs): valid output,
+invalid then valid (retry), safety block / refusal, not logged in, limit reached, timeout;
+provider selection from env; no API key in any CLI subprocess environment; Gemini redirect
+URLs resolved before the link check.
+
+**Done when:** for each of `claude_code`, `gemini_api` and `gemini_cli`, with no other provider's
+credentials set, `agent run --dry-run` on the real config ranks events and the `web` source
+finds dated events (ACs 15, 16).
 
 ## M4 — Events MVP: feedback + unattended runs
 Goal: the agent runs by itself every day and learns from what you keep or delete.
@@ -224,5 +241,6 @@ Gmail clients; idempotency and namespace per output.
 | Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; quality check after M4 |
 | M2 is the largest milestone | Slips | The spike and LLM services come first; Calendar work can start in parallel against fake clients |
 | GitHub Actions cron delays | Late digests | Acceptable for daily cadence; manual dispatch available |
-| Subscription usage limits hit by a run, or shared with your own Claude use | Run degrades to keyword ranking | Small `max_queries`; clear warning; API provider remains available |
-| Claude Code CLI output format changes between versions | Provider breaks after an update | Spike + recorded fixtures; validate JSON; fail with a clear message |
+| Subscription usage limits hit by a run, or shared with your own Claude/Gemini use | Run degrades to keyword ranking | Small `max_queries`; clear warning; API providers remain available |
+| Claude Code or Gemini CLI output format changes between versions | Provider breaks after an update | Spike + recorded fixtures; validate JSON; fail with a clear message |
+| Providers differ in extraction quality or link behaviour (e.g. Gemini redirect URLs) | Uneven results per provider | Shared contract tests; same validation for all; URL resolution; compare providers on the same recorded pages |

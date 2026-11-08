@@ -5,8 +5,8 @@ and publishes them where you already work: Google Calendar, Google Tasks, an Obs
 a markdown digest, or email.
 
 > **Status:** M1 and M2 built: events from iCal, web pages and web search, LLM ranking, a
-> markdown digest and Google Calendar suggestions. Next: running on a Claude subscription
-> (M3), feedback and scheduling (M4), news (M5) ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
+> markdown digest and Google Calendar suggestions. Next: Claude-subscription and Gemini
+> providers (M3), feedback and scheduling (M4), news (M5) ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
 
 ## Try it
 
@@ -107,8 +107,9 @@ agent schedule install|remove    *
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
 - `PERSONAL_AGENT_ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
-  only feed sources and a keyword ranker work), or, from M3, a Claude Pro/Max subscription via
-  Claude Code (`PERSONAL_AGENT_LLM_PROVIDER=claude_code`)
+  only feed sources and a keyword ranker work), or, from M3: a Claude Pro/Max subscription
+  (Claude Code), a Gemini API key, or a Google account via Gemini CLI
+  (`PERSONAL_AGENT_LLM_PROVIDER`)
 - Google OAuth credentials, if a Google output is enabled
 
 ## Docs

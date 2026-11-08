@@ -17,3 +17,6 @@ dist/
 token*.json
 credentials*.json
 out/
+
+# Claude Code personal settings
+.claude/settings.local.json

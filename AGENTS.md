@@ -23,9 +23,11 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
 - `publish()` must be idempotent per (item, output): re-runs never create duplicates.
 - A failing plugin, adapter or output must be logged and skipped; it must never abort a run.
 - Filters are deterministic code. Only the kernel `Ranker` and `Extractor` call the LLM, and
-  only through the `LLM` interface; providers (`anthropic_api`, `claude_code`) are selected by
-  `PERSONAL_AGENT_LLM_PROVIDER`, and nothing outside `kernel/services/llm*.py` may depend on
-  which one runs. The `claude_code` provider must never receive the API key.
+  only through the `LLM` interface; providers (`anthropic_api`, `claude_code`, `gemini_api`,
+  `gemini_cli`) are selected by `PERSONAL_AGENT_LLM_PROVIDER`, and nothing outside
+  `kernel/services/llm*.py` may depend on which one runs. Each provider reads only its own
+  `PERSONAL_AGENT_*` credential; CLI providers run with a clean environment and never receive
+  an API key. Every provider must pass the shared provider-contract tests.
 - Generic `web_search` / `web_page` adapters live in the kernel and take a plugin-supplied
   extraction spec; no site-specific scraping in the kernel.
 
@@ -64,8 +66,10 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
 - Python 3.12+, type hints everywhere, pydantic models for data crossing boundaries.
 - Small modules; no framework beyond what `docs/SPEC.md` §8 lists without discussing first.
 - LLM model name comes from config/env, never hard-coded in call sites.
-- Env vars and secrets use the `PERSONAL_AGENT_` prefix (`PERSONAL_AGENT_ANTHROPIC_API_KEY`, `PERSONAL_AGENT_MODEL`, ...).
-  Pass the API key to the SDK explicitly; never rely on the SDK reading `ANTHROPIC_API_KEY`.
+- Env vars and secrets use the `PERSONAL_AGENT_` prefix (`PERSONAL_AGENT_ANTHROPIC_API_KEY`,
+  `PERSONAL_AGENT_GEMINI_API_KEY`, `PERSONAL_AGENT_MODEL`, ...).
+  Pass API keys to the SDKs explicitly; never rely on an SDK reading `ANTHROPIC_API_KEY`,
+  `GEMINI_API_KEY` or `GOOGLE_API_KEY`.
 
 ## Testing
 - `pytest` must pass before committing; CI runs it on Ubuntu and Windows.
