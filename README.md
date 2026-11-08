@@ -20,8 +20,21 @@ interests.md + sources.md ─► kernel ─► events plugin ─► Suggestions 
   digest).
 - **Plugins:** `events` (iCal, Ticketmaster) and `news` (RSS, Hacker News, GDELT). A new
   content type is a new plugin; the kernel doesn't change.
-- **Safety:** the agent writes only to a dedicated *Suggestions* calendar, never to your main
-  calendar.
+- **Safety:** the agent writes only to a dedicated *Suggestions* calendar. Its Google token
+  can't modify your main calendar (scopes: `calendar.app.created`, `calendar.freebusy`).
+
+## Windows and Android
+
+The agent runs headless, by default on a schedule in GitHub Actions, so no device needs to
+stay on. Windows can also run it locally (`pipx` + Task Scheduler). On Android you use apps you
+already have:
+
+- **Google Calendar:** see suggestions; keep = accept, delete = reject
+- **Gmail / browser:** read the digest; tick 👍/👎 boxes in `digests/*.md` on github.com
+- **Browser:** edit `config/*.md` on github.com, or "Run workflow" for an on-demand run
+
+Running the agent itself on Android (Termux) is not supported: background scheduling is
+unreliable there. Details: [`docs/SPEC.md`](docs/SPEC.md#running-on-windows-and-android).
 
 ## Configuration
 
@@ -51,11 +64,13 @@ agent run [--plugin events|news] [--dry-run]
 agent plugins
 agent sources test <id>
 agent rate <item-id> up|down
+agent auth google
+agent schedule install|remove
 ```
 
 ## Requirements (planned)
 
-- Python 3.12+
+- Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
 - `ANTHROPIC_API_KEY` (optional; without it a keyword ranker is used)
 - Google OAuth credentials for Calendar (and Gmail, if the digest is emailed)
 - API keys for keyed sources, e.g. `TICKETMASTER_API_KEY`

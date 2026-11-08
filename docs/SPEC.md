@@ -51,11 +51,55 @@ Adding a new kind of content = adding a plugin; the kernel does not change.
 ### Built-in plugins
 | Plugin | Adapters | Filter | Deliver | Feedback |
 |---|---|---|---|---|
-| `events` | `ical`, `ticketmaster` | next 14 days, distance, price, time windows, Google `freeBusy` | tentative entries on **Suggestions** calendar + *Plan* section | kept/moved = accepted, deleted = rejected |
-| `news` | `rss`, `hackernews`, `gdelt` | published ≤ 48 h | *Read* section, duplicates collapsed | `agent rate <id> up\|down` |
+| `events` | `ical`, `ticketmaster` | next 14 days, distance, price, time windows, Google `freeBusy` | tentative entries on **Suggestions** calendar + *Plan* section | kept = accepted, deleted = rejected |
+| `news` | `rss`, `hackernews`, `gdelt` | published ≤ 48 h | *Read* section, duplicates collapsed | 👍/👎 boxes in digest, or `agent rate` |
 
 **Not in v1:** watches (news → event tracking), embedding clustering, chat bot, web UI,
 auto-editing interests.
+
+### Running on Windows and Android
+**Principle:** the agent is a headless scheduled job. Windows PCs and Android phones are
+*thin clients*: they use apps you already have (Google Calendar, Gmail, a browser). No device
+has to stay on, and there is no native app in v1.
+
+**Deployment modes**
+| Mode | Runs on | Scheduler | State | Status |
+|---|---|---|---|---|
+| **Cloud** (default) | GitHub Actions in this (private) repo | workflow `schedule:` + manual "Run workflow" | `agent.db` committed to an orphan `state` branch | v1 |
+| **Windows local** | Python via `pipx` | Task Scheduler, via `agent schedule install` | `%LOCALAPPDATA%\personal-agent\` | v1 |
+| Linux/macOS local | Python via `pipx` | cron / launchd, via `agent schedule install` | platform data dir | v1 (dev) |
+| Android local (Termux) | — | — | — | **Unsupported.** Doze and app standby defer or kill background jobs, so scheduled runs are unreliable. |
+
+Cloud-mode caveats: GitHub cron can start minutes to an hour late at busy times; a private
+repo gets 2,000 free Actions minutes/month (a run should take ~2 min). A `concurrency:` group
+prevents overlapping runs.
+
+**What you do from each device**
+| Task | Windows | Android |
+|---|---|---|
+| Edit `interests.md` / `sources.md` | any editor + git, or github.com | github.com in the browser, or a git-synced markdown editor |
+| See event suggestions | Google Calendar (web) | Google Calendar app (*Suggestions* calendar) |
+| Accept / reject an event | keep / delete it | keep / delete it |
+| Read the digest | Gmail, or `digests/` on github.com | Gmail app, or github.com |
+| Rate news | tick boxes in the digest file, or `agent rate` | tick boxes in the digest file on github.com |
+| Run on demand | `agent run`, or "Run workflow" | "Run workflow" on github.com |
+
+**Cross-platform requirements**
+- Pure-Python or wheel-available dependencies only; no POSIX-only calls (`fcntl`, `os.fork`,
+  shell scripts).
+- Paths via `pathlib`; config/state/cache locations via `platformdirs`.
+- All file I/O uses `encoding="utf-8"` explicitly (Windows otherwise defaults to a legacy code
+  page). The markdown parser accepts CRLF; `.gitattributes` sets `*.md text eol=lf`.
+- Timezones via `zoneinfo` + the `tzdata` package (Windows has no IANA database).
+- Secrets: environment variables, or the OS keyring (`keyring` → Windows Credential Manager)
+  locally; GitHub Actions secrets in cloud mode. Never in config files.
+- Google OAuth: `agent auth google` runs the browser consent flow once on a desktop and
+  stores the refresh token (keyring locally; paste into a repo secret for cloud mode).
+- **Least-privilege scopes:** `calendar.app.created` (manage only calendars the agent created,
+  i.e. *Suggestions*), `calendar.freebusy` (read busy slots, not event contents), and
+  `gmail.send` if the digest is emailed. The rule "never write to the main calendar" is then
+  enforced by Google, not just by our code.
+- CI runs the test suite on `ubuntu-latest` and `windows-latest`.
 
 ## 2. User stories
 
@@ -81,18 +125,29 @@ auto-editing interests.
   a one-line reason it matches.
 - **US-9** As a user, suggestions appear on a separate Suggestions calendar, never on my
   main calendar.
-- **US-10** As a user, I accept a suggestion by keeping/moving it and reject by deleting it.
+- **US-10** As a user, I accept a suggestion by keeping it and reject it by deleting it (from any
+  device's Calendar app).
 
 ### News
 - **US-11** As a user, I get a daily digest of the top ≤ 10 news items for my interests, each
   with a short summary and source link.
 - **US-12** As a user, the same story from multiple outlets appears once.
-- **US-13** As a user, I rate news with `agent rate <id> up|down`.
+- **US-13** As a user, I rate news by ticking 👍/👎 boxes in the digest file (works from a
+  phone browser) or with `agent rate <id> up|down`.
 
 ### Learning & ops
 - **US-14** As a user, my past ratings influence future selections.
 - **US-15** As a user, the agent runs on a schedule (news daily, events weekly).
 - **US-16** As a user, `agent run --dry-run` shows the digest without calendar writes or email.
+
+### Platforms
+- **US-17** As a user, the agent runs in the cloud on schedule without any of my devices on.
+- **US-18** As an Android user, I can see, accept and reject suggestions, read the digest, rate
+  news, and edit my interests and sources using only Google Calendar, Gmail and a browser.
+- **US-19** As a Windows user, I install with `pipx install` and schedule runs with one
+  command (`agent schedule install`).
+- **US-20** As a user, I trust that the agent cannot modify my main calendar because it never
+  holds a permission that would allow it.
 
 ## 3. Configuration documents
 
@@ -192,8 +247,15 @@ A section with no installed plugin is reported as a warning.
       keyword-overlap ranker is used.
    6. Keep top `max_items` with score ≥ `threshold`.
    7. `deliver()` → `DigestSection`.
-3. Kernel writes the digest (`out/digest-YYYY-MM-DD.md`, optional email) with sections in
-   plugin order.
+3. Kernel writes the digest to `digests/YYYY-MM-DD.md` (committed in cloud mode; optional
+   email) with sections in plugin order. Each item is rendered as:
+   ```markdown
+   - **Title** — reason/summary · [source](url) `id:ab12cd`
+     - [ ] 👍
+     - [ ] 👎
+   ```
+   At the start of the next run, the kernel reads ticked boxes in digests from the last 14 days
+   and records them as `up` / `down` feedback (idempotent).
 
 ## 6. CLI
 ```
@@ -201,6 +263,8 @@ agent run [--plugin events|news] [--dry-run]
 agent plugins
 agent sources test <id>
 agent rate <item-id> up|down
+agent auth google                 # one-time OAuth consent (desktop browser)
+agent schedule install|remove     # Task Scheduler on Windows, cron/launchd elsewhere
 ```
 
 ## 7. Code layout
@@ -211,17 +275,22 @@ personal_agent/
     models.py      # Item, DigestSection, RankHints
     plugin.py      # Plugin protocol, registry, entry-point discovery
     runner.py      # run loop
-    services/      # store.py, ranker.py, calendar.py, digest.py
+    services/      # store.py, ranker.py, calendar.py, digest.py, secrets.py
+    platform.py    # data dirs, scheduler install (schtasks / cron / launchd)
   plugins/
     events/        # plugin.py, adapters/{ical,ticketmaster}.py
     news/          # plugin.py, adapters/{rss,hackernews,gdelt}.py
   cli.py
 config/interests.md, config/sources.md
+digests/                    # generated digests (feedback checkboxes)
+.github/workflows/agent.yml # cloud mode: scheduled run, state branch
+.github/workflows/ci.yml    # tests on ubuntu + windows
 ```
 
 ## 8. Stack
-Python 3.12+ · Anthropic SDK (model configurable via env) · google-api-python-client
-(Calendar, Gmail) · feedparser · icalendar · httpx · pydantic · SQLite · cron.
+Python 3.12+ · Anthropic SDK (model configurable via env) · google-api-python-client +
+google-auth-oauthlib (Calendar, Gmail) · feedparser · icalendar · httpx · pydantic · SQLite ·
+platformdirs · tzdata · keyring · GitHub Actions.
 
 ## 9. Acceptance criteria (v1 done)
 1. `agent run --dry-run` with 1 event source + 2 news sources produces a digest with both sections.
@@ -234,8 +303,15 @@ Python 3.12+ · Anthropic SDK (model configurable via env) · google-api-python-
 7. Deleting a suggestion is recorded as `rejected` on the next run and appears in the next
    ranking prompt.
 8. Cost per daily run < $0.10 at ≤ 200 candidates.
+9. The test suite passes on Windows and Linux in CI.
+10. In cloud mode, the full loop works from an Android phone alone: deleting a suggestion in
+    the Calendar app is recorded as `rejected`, and ticking 👍 in a digest on github.com is
+    recorded as `up`, on the next run.
+11. The Google token holds only `calendar.app.created`, `calendar.freebusy` and (optionally)
+    `gmail.send`.
 
 ## 10. Open questions
-- Digest channel: email vs. markdown only?
+- Digest channel: email, repo file, or both?
 - Home city and initial interests.
-- Run location: local cron vs. small VM vs. GitHub Actions (needs persisted SQLite).
+- Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
+  cloud mode; otherwise use Windows local mode.)
