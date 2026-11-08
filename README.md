@@ -43,8 +43,8 @@ interests.md  sources.md                         outputs.md
 - **Kernel:** reads config, discovers plugins, ranks items with an LLM, routes them to
   outputs, and collects feedback. It knows nothing about events, news, calendars or notes.
 - **Content plugins:** `events` and `news`. Sources: iCal, RSS, Hacker News, GDELT, plus
-  generic **web search** and **web page** adapters for sites without a feed (starting with
-  Safejourney.pt and AllTera Tribe).
+  generic **web search** and **web page** adapters for sites without a feed. Your sources
+  are listed in `config/sources.md`.
 - **Output plugins:** `google_calendar`, `google_tasks`, `obsidian`, `markdown_digest`,
   `email`. Each also reads back your feedback: deleted calendar entry, completed task, ticked
   👍/👎 box.

@@ -9,16 +9,16 @@ on Ubuntu and Windows.
 | # | Milestone | Result | Spec ACs |
 |---|---|---|---|
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
-| M2 🟡 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
+| M2 ✅ | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, web pages and iCal feeds, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
 | M3 | **Alternative LLM providers**: Claude subscription, Gemini API, Gemini subscription | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code`, `gemini_api` or `gemini_cli` runs ranking, extraction and web search without the Claude API key | 15, 16 |
 | M4 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
 | M5 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
 
-🟡 M2: done and verified live (LLM ranking, `web_search`, the safejourney source, Google sign-in,
-free/busy, and a test event on the *Suggestions* calendar, 2026-11-08). Only open item: the
-AllTera Tribe URL.
+✅ M2: done and verified live on 2026-11-08 (LLM ranking, `web_search`, a `web_page` source with
+feed discovery, a Meetup iCal source, Google sign-in, free/busy, and a test event on the
+*Suggestions* calendar). AllTera Tribe was dropped (no website found).
 
 Sequence: M1 → M2 → M3 → M4 → M5. Inside M5, news and the extra outputs are
 independent and can be built in either order.
@@ -28,7 +28,7 @@ independent and can be built in either order.
 | Needed by | Item |
 |---|---|
 | M2 | `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
-| M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
+| M2 ✅ | Initial event sources (now in `config/sources.md`) |
 | M2 | Home city, timezone, initial topics for `interests.md` |
 | M2 ✅ | Google Cloud project `personal-agent` with Calendar API enabled and a **Desktop app** OAuth client (done; app in **Testing**, so the sign-in expires every 7 days) |
 | M4 | Publish the OAuth app (**In production**) so scheduled runs don't lose the sign-in weekly; needs a public home page and privacy-policy link on the Branding page |

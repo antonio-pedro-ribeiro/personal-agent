@@ -90,7 +90,8 @@ A run with warnings still completes; nothing needs fixing in a hurry.
 
 - `agent sources test <id>` for each checked source: does it still return items?
 - Sources that keep returning 0 events: uncheck them, or point `url` at the site's events page.
-- Pending: AllTera Tribe has no URL yet (`config/sources.md`); fill it in when you find it.
+- Meetup groups: use the group's iCal feed (`https://www.meetup.com/<group>/events/ical/`, type
+  `ical`); it's free and exact.
 - Update topics, weights and dislikes in `config/interests.md` (for example, after deleting many
   suggestions of one kind).
 - New feeds or venues: add them to `config/sources.md` (an `.ics` or RSS feed is free; a page
