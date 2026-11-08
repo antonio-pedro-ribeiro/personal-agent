@@ -441,6 +441,27 @@ agent rate <item-id> up|down
 agent auth google                 # one-time OAuth consent for enabled outputs' scopes
 agent schedule install|remove     # Task Scheduler on Windows, cron/launchd elsewhere
 ```
+The CLI is the **only** integration boundary into the kernel. Every other client — the
+scheduled cloud/local run, and the IDE cockpit below — invokes it rather than importing kernel
+or plugin modules directly, so the microkernel invariants (§1) hold regardless of caller.
+
+### IDE / chat cockpit (optional, non-authoritative)
+A VS Code custom agent (`.github/agents/personal-agent.agent.md`, scoped `@Personal Agent`) may
+wrap the CLI for interactive configuration editing, source/output testing, dry-run previews and
+troubleshooting. It is tooling around the product, not part of it:
+- **No special access.** It calls the same CLI commands listed above; it never imports
+  `personal_agent.kernel` or `personal_agent.plugins`, opens the SQLite store, or calls an LLM
+  provider directly. Anything it can do, a person typing the CLI by hand could do identically.
+- **Not a scheduler.** It only acts during an interactive chat session. Unattended execution
+  stays with GitHub Actions or the OS scheduler (§1, "Running on Windows and Android"); the
+  cockpit is never the thing that wakes up and runs the agent.
+- **Unrelated to the kernel's own LLM use.** The kernel's `Ranker`/`Extractor` calls (§1, "LLM
+  providers") are a narrow, structured, cost-accounted part of the run loop. The cockpit's
+  conversational model is a separate, human-facing concern; neither depends on the other.
+- **Write access is scoped to `config/*.md` and `docs/`.** Changes to `kernel/` or `plugins/`
+  code are expected to go through a reviewed coding session, not the cockpit agent, so the
+  "kernel never imports plugins" and idempotency invariants aren't put at risk by a casual
+  chat instruction.
 
 ## 7. Code layout
 ```
@@ -466,6 +487,8 @@ config/interests.md, config/sources.md, config/outputs.md
 digests/                    # markdown_digest output
 .github/workflows/agent.yml # cloud mode: scheduled run, state branch
 .github/workflows/ci.yml    # tests on ubuntu + windows
+.github/agents/personal-agent.agent.md  # IDE cockpit (§6); calls the CLI, not the kernel
+.vscode/tasks.json           # CLI commands exposed as VS Code tasks
 ```
 
 ## 8. Stack
