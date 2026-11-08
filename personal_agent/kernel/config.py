@@ -30,7 +30,7 @@ KNOWN_TIME_WINDOWS = {"weekday_evenings", "weekends"}
 
 
 def default_config_dir() -> Path:
-    return Path(os.environ.get("AGENT_CONFIG_DIR", "config"))
+    return Path(os.environ.get("PERSONAL_AGENT_CONFIG_DIR", "config"))
 
 
 def load_config(config_dir: Path) -> Config:

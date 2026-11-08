@@ -23,8 +23,8 @@ mixers" night, a Monday-morning workshop (outside your time windows), a Porto ev
 far) and a €150 gala (over budget) are dropped. Without `--dry-run`, the digest is written to
 `out/digests/YYYY-MM-DD.md`, and a second run adds nothing new.
 
-Your own setup lives in `config/` (`AGENT_CONFIG_DIR` to move it). State is kept in the
-platform data dir (`AGENT_DATA_DIR`, or `--db`).
+Your own setup lives in `config/` (`PERSONAL_AGENT_CONFIG_DIR` to move it). State is kept in the
+platform data dir (`PERSONAL_AGENT_DATA_DIR`, or `--db`).
 
 ## How it works
 
@@ -106,7 +106,7 @@ agent schedule install|remove    *
 ## Requirements (planned)
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
-- `AGENT_ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
+- `PERSONAL_AGENT_ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
   only feed sources and a keyword ranker work)
 - Google OAuth credentials, if a Google output is enabled
 

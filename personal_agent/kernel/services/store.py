@@ -46,7 +46,9 @@ MIGRATIONS: list[str] = [
 
 
 def default_db_path() -> Path:
-    base = os.environ.get("AGENT_DATA_DIR") or user_data_dir("personal-agent", appauthor=False)
+    base = os.environ.get("PERSONAL_AGENT_DATA_DIR") or user_data_dir(
+        "personal-agent", appauthor=False
+    )
     return Path(base) / "agent.db"
 
 

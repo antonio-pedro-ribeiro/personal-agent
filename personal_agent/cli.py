@@ -125,7 +125,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
-        "--config-dir", type=Path, default=None, help="default: $AGENT_CONFIG_DIR or ./config"
+        "--config-dir",
+        type=Path,
+        default=None,
+        help="default: $PERSONAL_AGENT_CONFIG_DIR or ./config",
     )
     parser.add_argument("--db", default=None, help="SQLite file (default: platform data dir)")
     parser.add_argument("-v", "--verbose", action="store_true")

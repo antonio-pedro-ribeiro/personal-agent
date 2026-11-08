@@ -67,7 +67,7 @@ returns schema-validated `Item`s.
 
 | Adapter | What it does | Cost / limits |
 |---|---|---|
-| `web_search` | For each enabled topic routed to the plugin, the Extractor runs a Claude request with the server-side web search tool (e.g. "jazz concerts Lisbon next 14 days") and extracts items from the results. Optional `allowed_domains`, `max_queries` per run (default 5). | ~$10 per 1,000 searches plus tokens; needs `AGENT_ANTHROPIC_API_KEY` |
+| `web_search` | For each enabled topic routed to the plugin, the Extractor runs a Claude request with the server-side web search tool (e.g. "jazz concerts Lisbon next 14 days") and extracts items from the results. Optional `allowed_domains`, `max_queries` per run (default 5). | ~$10 per 1,000 searches plus tokens; needs `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
 | `web_page` | Fetches `url` (and optional `pages:` subpaths). **Feed discovery first:** if the page links an RSS/Atom or `.ics` feed, it is parsed directly with no LLM. Otherwise the HTML is reduced to text and the Extractor pulls items out. Content hash cached: an unchanged page costs no LLM call. | one LLM call per changed page; respects `robots.txt`; 1 request/s per host |
 
 Rules: fetched pages and search results are untrusted data, passed to the LLM in delimited
@@ -152,7 +152,7 @@ prevents overlapping runs.
 | Read and rate the digest | Obsidian daily note, `digests/` on github.com, or Gmail | Obsidian app, github.com, or Gmail app |
 | Run on demand | `agent run`, or "Run workflow" | "Run workflow" on github.com |
 
-**Config location:** `AGENT_CONFIG_DIR` (default `config/`) can point inside the Obsidian vault,
+**Config location:** `PERSONAL_AGENT_CONFIG_DIR` (default `config/`) can point inside the Obsidian vault,
 so interests, sources and outputs are edited as ordinary notes on any device.
 
 **Cross-platform requirements**
@@ -162,7 +162,7 @@ so interests, sources and outputs are edited as ordinary notes on any device.
 - All file I/O uses `encoding="utf-8"` explicitly (Windows otherwise defaults to a legacy code
   page). The markdown parser accepts CRLF; `.gitattributes` sets `*.md text eol=lf`.
 - Timezones via `zoneinfo` + the `tzdata` package (Windows has no IANA database).
-- Secret names are app-specific (`AGENT_` prefix, e.g. `AGENT_ANTHROPIC_API_KEY`) so a
+- Secret names are app-specific (`PERSONAL_AGENT_` prefix, e.g. `PERSONAL_AGENT_ANTHROPIC_API_KEY`) so a
   user-wide variable never leaks this agent's key to other apps, or another app's key into
   this agent. The kernel passes the key to the SDK explicitly and does **not** fall back to
   the generic `ANTHROPIC_API_KEY`.
@@ -242,7 +242,7 @@ so interests, sources and outputs are edited as ordinary notes on any device.
 
 ## 3. Configuration documents
 
-Three plain markdown files in `AGENT_CONFIG_DIR` (default `config/`), readable and editable in
+Three plain markdown files in `PERSONAL_AGENT_CONFIG_DIR` (default `config/`), readable and editable in
 any editor, in Obsidian, or on GitHub.
 
 **Format rules**

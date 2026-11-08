@@ -22,7 +22,7 @@ independent and can be built in either order.
 
 | Needed by | Item |
 |---|---|
-| M2 | `AGENT_ANTHROPIC_API_KEY` |
+| M2 | `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
 | M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
 | M2 | Home city, timezone, initial topics for `interests.md` |
 | M2 | Google Cloud project with Calendar API enabled and an OAuth client of type **Desktop app**. Set the consent screen to **In production** (unverified is fine for personal use; you'll see a warning screen). In **Testing** status Google expires refresh tokens after 7 days, which would break scheduled runs. |
@@ -48,7 +48,7 @@ LLM or Google dependency.
   `Profile`, `Topic`, `Source`, `OutputConfig`.
 - `kernel/services/checklist.py`: parse checklist items, `key: value` attributes, sections;
   tolerate CRLF, frontmatter and free text; file:line warnings. Also renders the digest item format.
-- `kernel/config.py`: load `interests.md`, `sources.md`, `outputs.md` from `AGENT_CONFIG_DIR`.
+- `kernel/config.py`: load `interests.md`, `sources.md`, `outputs.md` from `PERSONAL_AGENT_CONFIG_DIR`.
 - `kernel/plugin.py`: `ContentPlugin` / `OutputPlugin` protocols, entry-point registry.
 - `kernel/services/store.py`: SQLite schema + migrations; location via `platformdirs`.
 - `kernel/runner.py`: run loop with per-plugin/adapter/output isolation, router (`plugins`,
@@ -80,7 +80,7 @@ JavaScript, decide: a Playwright fetch mode (new dependency, needs a spec change
 source in favour of `web_search` with `allowed_domains`.
 
 **LLM services**
-- `kernel/services/llm.py`: Anthropic client wrapper; model from `AGENT_MODEL`; structured
+- `kernel/services/llm.py`: Anthropic client wrapper; model from `PERSONAL_AGENT_MODEL`; structured
   outputs via pydantic; refusal handling; token/cost log per run.
 - `Ranker`: batched JSON scoring `[{id, score, reason, duplicate_of}]`, keyword fallback.
 - `Extractor`: plugin extraction spec + untrusted content in delimited blocks → validated `Item`s.
@@ -117,7 +117,7 @@ Goal: the agent runs by itself every day and learns from what you keep or delete
 
 **Deployment**
 - `.github/workflows/agent.yml`: daily `schedule` + `workflow_dispatch`; `concurrency` group;
-  `agent.db` on the orphan `state` branch; commit `digests/`; secrets `AGENT_ANTHROPIC_API_KEY`,
+  `agent.db` on the orphan `state` branch; commit `digests/`; secrets `PERSONAL_AGENT_ANTHROPIC_API_KEY`,
   `GOOGLE_TOKEN_JSON`; run-log artifact (items, scores, cost).
 - `kernel/platform.py` + `agent schedule install|remove`: Task Scheduler on Windows,
   cron/launchd elsewhere.
@@ -145,7 +145,7 @@ Goal: complete the spec.
 
 **More outputs**
 - `obsidian.py`: daily note with frontmatter and the shared checklist renderer; feedback from
-  ticked boxes; cloud mode only with a git vault. Allow `AGENT_CONFIG_DIR` inside the vault.
+  ticked boxes; cloud mode only with a git vault. Allow `PERSONAL_AGENT_CONFIG_DIR` inside the vault.
 - `google_tasks.py`: *Agent* list, due date = event date, "Read: …" for news; completed/deleted
   → feedback. Off by default (`tasks` scope is broad).
 - `email.py`: `gmail.send`, the digest rendered as HTML.

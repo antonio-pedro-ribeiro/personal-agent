@@ -48,7 +48,7 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
   `gmail.send`) plus `calendar.freebusy`. Adding a new scope requires a spec change.
 
 ## Config files
-- `interests.md`, `sources.md` and `outputs.md` (in `AGENT_CONFIG_DIR`, possibly inside an
+- `interests.md`, `sources.md` and `outputs.md` (in `PERSONAL_AGENT_CONFIG_DIR`, possibly inside an
   Obsidian vault) are user-owned markdown checklists.
   Don't reformat them, and don't change their format without updating the parser, the spec
   (§3), and the tests together.
@@ -61,7 +61,7 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
 - Python 3.12+, type hints everywhere, pydantic models for data crossing boundaries.
 - Small modules; no framework beyond what `docs/SPEC.md` §8 lists without discussing first.
 - LLM model name comes from config/env, never hard-coded in call sites.
-- Env vars and secrets use the `AGENT_` prefix (`AGENT_ANTHROPIC_API_KEY`, `AGENT_MODEL`, ...).
+- Env vars and secrets use the `PERSONAL_AGENT_` prefix (`PERSONAL_AGENT_ANTHROPIC_API_KEY`, `PERSONAL_AGENT_MODEL`, ...).
   Pass the API key to the SDK explicitly; never rely on the SDK reading `ANTHROPIC_API_KEY`.
 
 ## Testing
