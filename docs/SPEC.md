@@ -47,11 +47,16 @@ of plugins:
 ### Content plugin API
 ```python
 class ContentPlugin(Protocol):
-    name: str                                            # "## <Name>" section in sources.md
-    def collect(self, sources, profile, ctx) -> list[Item]: ...
-    def filter(self, items, profile, ctx) -> list[Item]: ...   # deterministic, no LLM
-    def rank_hints(self, profile) -> RankHints: ...            # rubric, threshold, max items
+    name: str   # "## <Name>" section in sources.md
+    title: str  # digest section heading, e.g. "Plan" (events), "Read" (news)
+
+    def collect(self, sources, interests, ctx) -> list[Item]: ...
+    def filter(self, items, interests, ctx) -> list[Item]: ...  # deterministic, no LLM
+    def rank_hints(self, interests, ctx) -> RankHints: ...      # rubric, threshold, max items
 ```
+`interests` contains only the enabled topics routed to the plugin, plus enabled dislikes.
+The events plugin caps `max_items` at `max_events_per_week` minus events delivered in the
+last 7 days (rolling), so daily runs don't exceed the weekly budget.
 A content plugin owns its **source adapters** (`type` in `sources.md`) and domain rules.
 
 ### Generic adapters (kernel)
@@ -75,12 +80,13 @@ fix is a dedicated adapter in the plugin, written later.
 ### Output plugin API
 ```python
 class OutputPlugin(Protocol):
-    type: str                                  # e.g. "google_calendar"
-    google_scopes: list[str]                   # [] if not a Google output
-    def accepts(self, item: RankedItem) -> bool: ...           # e.g. calendar needs item.start
+    type: str  # e.g. "google_calendar"
+    google_scopes: list[str]  # [] if not a Google output
+
+    def accepts(self, item: RankedItem) -> bool: ...  # e.g. calendar needs item.start
     def publish(self, items, cfg, ctx) -> list[Delivery]: ...  # idempotent per (item, output)
     def sync_feedback(self, deliveries, cfg, ctx) -> list[Feedback]: ...
-    def preview(self, items, cfg) -> str: ...                  # for --dry-run
+    def preview(self, items, cfg) -> str: ...  # for --dry-run
 ```
 `Delivery = (item_id, output_id, external_ref)`; `Feedback = (item_id, signal, at, output_id)`.
 
@@ -240,7 +246,9 @@ any editor, in Obsidian, or on GitHub.
 - Item line: `- [x] **<id>** — <description or type>`.
 - Indented `- key: value` bullets under an item are its attributes; comma-separated values
   become lists.
-- `## Heading` sections give context: in `sources.md` the heading is the content plugin name.
+- `## Heading` sections give context: in `sources.md` the `##` heading is the content plugin
+  name (items under the `#` title or outside a section are ignored with a warning).
+- ` ← comment` at the end of an item line or attribute value is stripped.
 - Anything else (paragraphs, notes, Obsidian frontmatter) is ignored, so the files can hold
   free-form comments.
 - Parse errors name the file and line; an invalid item is skipped, not fatal.
@@ -303,7 +311,8 @@ Defaults: `weight: 0.5`, `plugins:` all installed content plugins.
 The text after `—` is the adapter `type`. `search: true` means the adapter receives the
 keywords of enabled topics that list this plugin; otherwise it fetches its whole feed.
 A section with no installed content plugin is reported as a warning. A source with a missing
-or invalid `url` is skipped with a warning.
+or invalid `url` is skipped with a warning. A `url` without a scheme is a local file path,
+relative to the config directory (useful for exported `.ics` files and fixtures).
 
 ### `outputs.md`
 ```markdown
@@ -329,7 +338,8 @@ or invalid `url` is skipped with a warning.
 ```
 The text after `—` is the output `type`; several instances of one type are allowed (e.g. two
 vault folders). Common attributes: `plugins` (routing; default all) and `min_score`
-(default 0). Other attributes are passed to the output plugin as `cfg`. An output whose type
+(default 0). Other attributes are passed to the output plugin as `cfg`. Relative output paths
+(e.g. `path: digests`) resolve against the working directory (the repo root in cloud mode). An output whose type
 is not installed, or that cannot run in the current mode (e.g. `obsidian` in cloud mode
 without a git vault), is reported as a warning and skipped.
 
@@ -338,13 +348,14 @@ without a git vault), is reported as a warning and skipped.
 ### `Item` (kernel model, shared by all plugins)
 | Field | Type | Notes |
 |---|---|---|
-| id | str | sha1(url) |
+| id | str | sha1 of a plugin-chosen stable key: the URL, or for events source + UID + start (each recurring occurrence is its own item) |
 | plugin | str | `events`, `news`, … |
 | title, url, source_id | str | |
 | summary | str | raw text, truncated to 1,000 chars |
 | published_at | datetime? | |
-| start, end | datetime? | outputs use these to decide `accepts()` |
-| extra | dict | plugin-specific (venue, lat, lon, price, …) |
+| start, end | datetime? | timezone-aware; outputs use these to decide `accepts()` |
+| location | str? | venue or place name, shown by outputs |
+| extra | dict | plugin-specific (`all_day`, `lat`, `lon`, `price`, …) |
 
 `RankedItem` = `Item` + `score`, `reason`, `also_at` (duplicate URLs).
 
@@ -360,8 +371,10 @@ without a git vault), is reported as a warning and skipped.
    store new signals (idempotent).
 3. For each enabled content plugin with ≥ 1 enabled source:
    1. `collect()` — per-adapter timeout 20 s; failures logged.
-   2. Kernel drops items already in `items`.
-   3. `filter()` — deterministic; also drops checked dislikes.
+   2. Kernel merges duplicates by `id`, records `first_seen`, and drops items already
+      delivered to **every** output that routes this plugin (no wasted ranking calls).
+   3. `filter()` — deterministic; then the kernel drops items matching a checked dislike
+      (whole-phrase, case-insensitive, on title, summary and location).
    4. Kernel `Ranker`: one LLM call per plugin (≤ 50 candidates), input = enabled topics for
       the plugin, dislikes, `rank_hints`, last 20 feedback examples. Output is JSON validated
       against a schema: `[{id, score 0–100, reason, duplicate_of?}]`. Without an API key, a

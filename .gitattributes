@@ -1,0 +1,4 @@
+* text=auto
+*.md text eol=lf
+*.ics text eol=crlf
+*.py text eol=lf
