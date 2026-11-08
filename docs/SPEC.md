@@ -19,14 +19,15 @@ of plugins:
           ▼                        ▼                          ▼
 ┌──────────────────────────────── KERNEL ─────────────────────────────────┐
 │ Config (markdown checklists) · Plugin registry · Run loop · Router      │
-│ Services: Store (SQLite) · Ranker (LLM) · Availability (free/busy)      │
-│           Google auth · Secrets · HTTP · Clock · Log                    │
+│ Services: Store (SQLite) · Ranker (LLM) · Extractor (LLM, web search)   │
+│           Availability (free/busy) · Google auth · Secrets · HTTP · Log │
+│ Generic adapters: web_search · web_page (usable by any content plugin)  │
 └──────▲───────────────────▲─────────────────────▲──────────────▲─────────┘
        │ Content API       │                     │ Output API   │
 ┌──────┴───────┐   ┌───────┴──────┐   ┌──────────┴───┐  ┌───────┴────────┐
 │ events       │   │ news         │   │ google_      │  │ obsidian       │
-│  ical,       │   │  rss, hn,    │   │ calendar     │  │ markdown_digest│
-│  ticketmaster│   │  gdelt       │   │ google_tasks │  │ email  …       │
+│  ical        │   │  rss, hn,    │   │ calendar     │  │ markdown_digest│
+│              │   │  gdelt       │   │ google_tasks │  │ email  …       │
 └──────────────┘   └──────────────┘   └──────────────┘  └────────────────┘
         items  ──►  dedupe · filter · rank  ──►  route  ──►  publish
                                                     ◄──  feedback
@@ -38,7 +39,8 @@ of plugins:
   `personal_agent.outputs`; give each plugin only its own config.
 - Run the loop (§5) and **route** ranked items to outputs according to `outputs.md`.
 - Record deliveries and normalize feedback from every output into one `feedback` table.
-- Provide shared services. Plugins never open DB connections or call the LLM directly; Google
+- Provide shared services. Plugins never open DB connections or call the LLM directly (only
+  the kernel `Ranker` and `Extractor` do); Google
   API clients come from the kernel's `Google auth` service with only the scopes they declared.
 - Isolate failures: an exception in a plugin, adapter or output is logged and skipped.
 
@@ -51,6 +53,24 @@ class ContentPlugin(Protocol):
     def rank_hints(self, profile) -> RankHints: ...            # rubric, threshold, max items
 ```
 A content plugin owns its **source adapters** (`type` in `sources.md`) and domain rules.
+
+### Generic adapters (kernel)
+For sources without a feed or API, the kernel provides two adapters any content plugin can use
+in `sources.md`. The plugin supplies an **extraction spec** (target `Item` fields plus domain
+instructions, e.g. "events in Portugal with date, venue, price"); the kernel `Extractor`
+returns schema-validated `Item`s.
+
+| Adapter | What it does | Cost / limits |
+|---|---|---|
+| `web_search` | For each enabled topic routed to the plugin, the Extractor runs a Claude request with the server-side web search tool (e.g. "jazz concerts Lisbon next 14 days") and extracts items from the results. Optional `allowed_domains`, `max_queries` per run (default 5). | ~$10 per 1,000 searches plus tokens; needs `ANTHROPIC_API_KEY` |
+| `web_page` | Fetches `url` (and optional `pages:` subpaths). **Feed discovery first:** if the page links an RSS/Atom or `.ics` feed, it is parsed directly with no LLM. Otherwise the HTML is reduced to text and the Extractor pulls items out. Content hash cached: an unchanged page costs no LLM call. | one LLM call per changed page; respects `robots.txt`; 1 request/s per host |
+
+Rules: fetched pages and search results are untrusted data, passed to the LLM in delimited
+blocks with an instruction to ignore embedded instructions; every extracted item must carry a
+source URL; items whose date or URL fails validation are dropped. Without an API key, `web_*`
+sources are skipped with a warning (feed-discovered sources still work).
+Site-specific scraping code is avoided: if a generic `web_page` source proves unreliable, the
+fix is a dedicated adapter in the plugin, written later.
 
 ### Output plugin API
 ```python
@@ -73,8 +93,8 @@ Adding a content type or an output = adding a plugin package; the kernel does no
 ### Built-in content plugins
 | Plugin | Adapters | Filter |
 |---|---|---|
-| `events` | `ical`, `ticketmaster` | next 14 days, distance, price, time windows, free/busy (Availability service) |
-| `news` | `rss`, `hackernews`, `gdelt` | published ≤ 48 h |
+| `events` | `ical` + generic `web_search`, `web_page` | next 14 days, distance, price, time windows, free/busy (Availability service) |
+| `news` | `rss`, `hackernews`, `gdelt` + generic `web_search`, `web_page` | published ≤ 48 h |
 
 ### Built-in output plugins
 | Output type | Publishes | Accepts | Feedback | Google scopes | Runs in |
@@ -263,10 +283,14 @@ Defaults: `weight: 0.5`, `plugins:` all installed content plugins.
 # Sources
 
 ## Events
-- [x] **ticketmaster** — ticketmaster
+- [x] **web** — web_search
   - search: true
-  - env: TICKETMASTER_API_KEY
-- [x] **zdb-jazz** — ical
+  - max_queries: 5
+- [x] **safejourney** — web_page
+  - url: https://safejourney.pt
+- [x] **alltera-tribe** — web_page
+  - url: TBD   ← confirm the official site or event page
+- [ ] **zdb-jazz** — ical
   - url: https://example.com/calendar.ics
 
 ## News
@@ -278,7 +302,8 @@ Defaults: `weight: 0.5`, `plugins:` all installed content plugins.
 ```
 The text after `—` is the adapter `type`. `search: true` means the adapter receives the
 keywords of enabled topics that list this plugin; otherwise it fetches its whole feed.
-A section with no installed content plugin is reported as a warning.
+A section with no installed content plugin is reported as a warning. A source with a missing
+or invalid `url` is skipped with a warning.
 
 ### `outputs.md`
 ```markdown
@@ -374,11 +399,12 @@ personal_agent/
     models.py      # Item, RankedItem, RankHints, Delivery, Feedback
     plugin.py      # ContentPlugin / OutputPlugin protocols, registry, entry points
     runner.py      # run loop + router
-    services/      # store, ranker, availability, google_auth, secrets, checklist
+    services/      # store, ranker, extractor, availability, google_auth, secrets, checklist
+    adapters/      # generic: web_search.py, web_page.py (feed discovery + extraction)
     platform.py    # data dirs, scheduler install (schtasks / cron / launchd)
   plugins/
     content/
-      events/      # plugin.py, adapters/{ical,ticketmaster}.py
+      events/      # plugin.py, extraction spec, adapters/ical.py
       news/        # plugin.py, adapters/{rss,hackernews,gdelt}.py
     outputs/
       google_calendar.py  google_tasks.py  obsidian.py  markdown_digest.py  email.py
@@ -395,8 +421,8 @@ google-auth-oauthlib (Calendar, Tasks, Gmail) · feedparser · icalendar · http
 SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 
 ## 9. Acceptance criteria (v1 done)
-1. `agent run --dry-run` with 1 event source, 2 news sources and the `markdown_digest` +
-   `google_calendar` outputs previews both outputs; events appear in both, news only in the
+1. `agent run --dry-run` with the `web`, `safejourney` and `alltera-tribe` event sources,
+   2 news sources and the `markdown_digest` + `google_calendar` outputs previews both outputs; events appear in both, news only in the
    digest.
 2. Unchecking a topic, source or output removes its effect on the next run; no other edit needed.
 3. The kernel has no imports from `plugins/`; removing any one plugin package (e.g. `news` or
@@ -408,16 +434,24 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 8. Feedback from each output with feedback support (calendar delete, task complete/delete,
    ticked box in digest or Obsidian note) is recorded on the next run and appears in the next
    ranking prompt.
-9. Cost per daily run < $0.10 at ≤ 200 candidates.
+9. Cost per daily run < $0.25 at ≤ 200 candidates, including ≤ 5 web searches and ≤ 3
+   changed pages extracted.
 10. The test suite passes on Windows and Linux in CI.
 11. In cloud mode, the full loop works from an Android phone alone using the Calendar app and
     a browser.
 12. The Google token holds only the scopes required by enabled outputs plus
     `calendar.freebusy`.
+13. A `web_page` source whose page is unchanged since the last run makes no LLM call, and a
+    page that links an RSS/iCal feed is parsed without the LLM.
+14. Text such as "ignore previous instructions" inside a fetched page or search result has no
+    effect on extraction or ranking (fixture test).
 
 ## 10. Open questions
 - Which outputs to enable by default: digest only, or digest + calendar?
 - Home city and initial interests.
+- AllTera Tribe: official URL? (Neither it nor safejourney.pt could be verified while writing
+  this spec.) Do either publish an RSS/iCal feed or an Instagram/Facebook-only calendar? Social
+  media pages are not fetchable without login and are out of scope.
 - Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
   cloud mode; otherwise use Windows local mode.)
 - Obsidian: is the vault git-synced (cloud mode works) or Obsidian Sync-only (local mode)?

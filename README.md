@@ -22,7 +22,9 @@ interests.md  sources.md                         outputs.md
 
 - **Kernel:** reads config, discovers plugins, ranks items with an LLM, routes them to
   outputs, and collects feedback. It knows nothing about events, news, calendars or notes.
-- **Content plugins:** `events` (iCal, Ticketmaster) and `news` (RSS, Hacker News, GDELT).
+- **Content plugins:** `events` and `news`. Sources: iCal, RSS, Hacker News, GDELT, plus
+  generic **web search** and **web page** adapters for sites without a feed (starting with
+  Safejourney.pt and AllTera Tribe).
 - **Output plugins:** `google_calendar`, `google_tasks`, `obsidian`, `markdown_digest`,
   `email`. Each also reads back your feedback: deleted calendar entry, completed task, ticked
   👍/👎 box.
@@ -84,9 +86,9 @@ agent schedule install|remove
 ## Requirements (planned)
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
-- `ANTHROPIC_API_KEY` (optional; without it a keyword ranker is used)
+- `ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
+  only feed sources and a keyword ranker work)
 - Google OAuth credentials, if a Google output is enabled
-- API keys for keyed sources, e.g. `TICKETMASTER_API_KEY`
 
 ## Docs
 

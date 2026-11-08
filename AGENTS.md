@@ -22,7 +22,9 @@ Guidance for coding agents (Claude Code, Codex, etc.) working in this repository
   (`plugins/content/<name>/adapters/`).
 - `publish()` must be idempotent per (item, output): re-runs never create duplicates.
 - A failing plugin, adapter or output must be logged and skipped; it must never abort a run.
-- Filters are deterministic code. Only the kernel `Ranker` calls the LLM.
+- Filters are deterministic code. Only the kernel `Ranker` and `Extractor` call the LLM.
+- Generic `web_search` / `web_page` adapters live in the kernel and take a plugin-supplied
+  extraction spec; no site-specific scraping in the kernel.
 
 ## Safety rules
 - Namespace rule: each output writes only into a container it owns (*Suggestions* calendar,
