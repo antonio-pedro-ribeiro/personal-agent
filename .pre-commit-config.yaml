@@ -1,0 +1,43 @@
+# Local safety net mirroring .github/workflows/ci.yml, so a broken test or lint rule
+# can't be committed in the first place (see AGENTS.md: "pytest must pass before committing").
+#
+# Setup (once per clone):
+#   python -m pip install -e ".[dev]"
+#   pre-commit install
+#
+# All hooks run against the project's own dev environment (not pre-commit's isolated venvs),
+# so they see the same dependencies as CI.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: ruff check
+        language: system
+        types: [python]
+
+      - id: ruff-format-check
+        name: ruff format --check
+        entry: ruff format --check
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: import-linter
+        name: import-linter (kernel never imports plugins)
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: pytest -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]  # full suite on push only; keeps `git commit` fast

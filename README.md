@@ -16,6 +16,7 @@ agent --config-dir examples/demo run --dry-run   # offline demo, writes nothing
 agent --config-dir examples/demo sources test demo-venues
 agent plugins
 python -m pip install -e ".[dev]" && pytest   # tests (also: ruff check ., mypy, lint-imports)
+pre-commit install   # one-time: blocks commits that fail lint/type-check/import rules
 ```
 
 The demo reads a local iCal file and shows the filters at work: a disliked "networking
