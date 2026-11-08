@@ -83,6 +83,25 @@ class HttpService:
     def get_bytes(self, url: str) -> bytes:
         return self.get(url).content
 
+    def resolve(self, url: str) -> str | None:
+        """The target of a redirect link (one HEAD request, falling back to GET), read from the
+        ``Location`` header without fetching the target; None if ``url`` doesn't redirect."""
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return None
+        headers = {"User-Agent": USER_AGENT}
+        try:
+            for method in ("HEAD", "GET"):
+                self._throttle(parsed.netloc)
+                r = httpx.request(method, url, timeout=self.timeout, headers=headers)
+                if r.is_redirect and (location := r.headers.get("location")):
+                    return urljoin(url, str(location))
+                if r.status_code not in (405, 501):
+                    return None
+        except httpx.HTTPError:
+            return None
+        return None
+
     def allowed(self, url: str) -> bool:
         """robots.txt check; unreachable or missing robots.txt means allowed."""
         parsed = urlparse(url)

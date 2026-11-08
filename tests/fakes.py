@@ -15,6 +15,8 @@ from personal_agent.kernel.services.llm import ParseResult, Usage, WebSearch
 class FakeLLM:
     """Returns canned outputs; ``respond`` maps (system, prompt) to a dict for the schema."""
 
+    provider = "anthropic_api"
+    billing = "api"
     model = "claude-opus-5-5"
 
     def __init__(

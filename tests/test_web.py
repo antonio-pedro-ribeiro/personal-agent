@@ -115,7 +115,7 @@ def test_robots_and_missing_url_and_no_llm(make_ctx: Callable[..., RunContext]) 
     with pytest.raises(ValueError, match="needs a 'url'"):
         web.page(source(url="TBD"), SPEC, LISBON, NOW)
     http.disallow.clear()
-    with pytest.raises(RuntimeError, match="PERSONAL_AGENT_ANTHROPIC_API_KEY"):
+    with pytest.raises(RuntimeError, match="PERSONAL_AGENT_LLM_PROVIDER"):
         WebSources(http, None).page(source(url="https://s.test/"), SPEC, LISBON, NOW)
 
 

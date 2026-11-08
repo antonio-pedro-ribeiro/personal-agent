@@ -194,6 +194,7 @@ class WebSources:
     def _need_extractor(self, source: Source) -> Extractor:
         if self.extractor is None:
             raise RuntimeError(
-                f"source '{source.id}' needs an LLM: set PERSONAL_AGENT_ANTHROPIC_API_KEY"
+                f"source '{source.id}' needs an LLM: set up the provider chosen by "
+                "PERSONAL_AGENT_LLM_PROVIDER (default claude_code: sign in to Claude Code)"
             )
         return self.extractor

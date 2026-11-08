@@ -31,8 +31,21 @@ def _no_real_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tests never use real keys, the OS keyring or Google (AGENTS.md: no network)."""
     from personal_agent.kernel.services import google
 
-    for name in ("PERSONAL_AGENT_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY", google.TOKEN_ENV):
+    for name in (
+        "PERSONAL_AGENT_ANTHROPIC_API_KEY",
+        "PERSONAL_AGENT_GEMINI_API_KEY",
+        "PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN",
+        "PERSONAL_AGENT_LLM_PROVIDER",
+        "PERSONAL_AGENT_MODEL",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        google.TOKEN_ENV,
+    ):
         monkeypatch.delenv(name, raising=False)
+    # The default provider (claude_code) would run the real CLI if installed; pin a keyless
+    # API provider so tests get "no LLM" unless they inject a fake.
+    monkeypatch.setenv("PERSONAL_AGENT_LLM_PROVIDER", "anthropic_api")
     monkeypatch.setattr(google, "load_token", lambda: (None, "test"))
 
 

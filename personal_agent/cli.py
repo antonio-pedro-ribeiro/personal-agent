@@ -62,10 +62,15 @@ def build_context(
     http = HttpService(base_dir=config_dir)
     warnings: list[str] = []
 
-    model = llm.from_env() if use_llm else None
+    model: llm.Guarded | None = None
+    if use_llm:
+        model, notes = llm.select(resolve=http.resolve)
+        if model is None:
+            reason = "; ".join(notes)
+            warnings.append(f"No LLM ({reason}): keyword ranking only, web sources skipped")
+        else:
+            warnings.extend(notes)
     ranker: Ranker = LLMRanker(model) if model else KeywordRanker()
-    if model is None and use_llm:
-        warnings.append(f"{llm.API_KEY_ENV} not set: keyword ranking only, web sources skipped")
 
     google_service: google.GoogleService | None = None
     availability: Availability = NoAvailability()
@@ -107,11 +112,17 @@ def _cost_line(ctx: RunContext) -> str | None:
     if model is None or not model.usage.calls:
         return None
     u = model.usage
-    cost = u.cost_usd(model.model)
-    money = f"~${cost:.3f}" if cost is not None else "cost unknown for this model"
+    if model.billing == "plan":
+        money = "included in plan"
+        if u.notional_usd:
+            money += f" (~${u.notional_usd:.3f} at API prices)"
+    else:
+        cost = u.cost_usd(model.model)
+        money = f"~${cost:.3f}" if cost is not None else "cost unknown for this model"
     return (
-        f"LLM: {model.model}, {u.calls} call(s), {u.input_tokens:,} in / "
-        f"{u.output_tokens:,} out tokens, {u.web_searches} web search(es), {money}"
+        f"LLM: {model.provider} {model.model}, {u.calls} call(s), {u.seconds:.0f}s, "
+        f"{u.input_tokens:,} in / {u.output_tokens:,} out tokens, "
+        f"{u.web_searches} web search(es), {money}"
     )
 
 
@@ -145,14 +156,24 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
     finally:
         ctx.store.close()
     report.warnings += getattr(ctx.ranker, "errors", [])
+    if reason := getattr(ctx.llm, "unavailable", None):
+        report.warnings.append(
+            f"LLM provider unavailable ({reason}): keyword ranking used, web sources skipped"
+        )
 
     if args.dry_run:
-        mode = (
-            "DRY RUN (nothing published; ranking/extraction below may still call the LLM "
-            "and cost money)"
-            if ctx.llm is not None
-            else "DRY RUN (nothing published)"
-        )
+        if ctx.llm is None:
+            mode = "DRY RUN (nothing published)"
+        elif ctx.llm.billing == "plan":
+            mode = (
+                "DRY RUN (nothing published; ranking/extraction below still call the LLM, "
+                "using your plan's usage limits)"
+            )
+        else:
+            mode = (
+                "DRY RUN (nothing published; ranking/extraction below may still call the LLM "
+                "and cost money)"
+            )
     else:
         mode = "Run"
     print(f"{mode} — {ctx.now.astimezone(ctx.tz):%Y-%m-%d %H:%M %Z}")
