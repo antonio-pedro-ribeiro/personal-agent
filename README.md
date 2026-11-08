@@ -93,4 +93,5 @@ agent schedule install|remove
 ## Docs
 
 - [`docs/SPEC.md`](docs/SPEC.md): architecture, user stories, config format, acceptance criteria
+- [`docs/PLAN.md`](docs/PLAN.md): implementation milestones (events first, then news)
 - [`AGENTS.md`](AGENTS.md): guidance for coding agents working in this repo
