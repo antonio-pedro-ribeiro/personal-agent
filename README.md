@@ -4,9 +4,9 @@ A personal assistant agent that researches **events** and **news** matching your
 and publishes them where you already work: Google Calendar, Google Tasks, an Obsidian vault,
 a markdown digest, or email.
 
-> **Status:** milestone M1 (foundation) done: kernel, markdown digest output, events from
-> iCal, offline. Web sources, LLM ranking and Google Calendar come in M2
-> ([`docs/PLAN.md`](docs/PLAN.md)).
+> **Status:** M1 and M2 built: events from iCal, web pages and web search, LLM ranking, a
+> markdown digest and Google Calendar suggestions. Feedback and scheduling come in M3, news in
+> M4 ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
 
 ## Try it
 
@@ -15,7 +15,7 @@ python -m pip install -e ".[dev]"      # Python 3.12+, Windows/Linux/macOS
 agent --config-dir examples/demo run --dry-run   # offline demo, writes nothing
 agent --config-dir examples/demo sources test demo-venues
 agent plugins
-pytest                                  # tests (also: ruff check ., mypy, lint-imports)
+python -m pip install -e ".[dev]" && pytest   # tests (also: ruff check ., mypy, lint-imports)
 ```
 
 The demo reads a local iCal file and shows the filters at work: a disliked "networking
@@ -97,9 +97,9 @@ Full format: [`docs/SPEC.md` §3](docs/SPEC.md#3-configuration-documents).
 agent run [--plugin events|news] [--output <id>] [--dry-run]
 agent plugins
 agent sources test <id>
-agent outputs test <id>          *
+agent outputs test <id>
 agent rate <item-id> up|down     *
-agent auth google                *
+agent auth google
 agent schedule install|remove    *
 ```
 
@@ -112,6 +112,7 @@ agent schedule install|remove    *
 
 ## Docs
 
+- [`docs/USAGE.md`](docs/USAGE.md): quickstart, configuration reference, commands, costs, troubleshooting
 - [`docs/SPEC.md`](docs/SPEC.md): architecture, user stories, config format, acceptance criteria
 - [`docs/PLAN.md`](docs/PLAN.md): implementation milestones (events first, then news)
 - [`AGENTS.md`](AGENTS.md): guidance for coding agents working in this repo
