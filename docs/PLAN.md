@@ -16,9 +16,9 @@ on Ubuntu and Windows.
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
 
-🟡 M2: code and offline tests done; LLM ranking, `web_search` and the safejourney source verified
-live. Waiting on: a real Google sign-in (`agent auth google`) to verify the Calendar output, and
-the AllTera Tribe URL.
+🟡 M2: done and verified live (LLM ranking, `web_search`, the safejourney source, Google sign-in,
+free/busy, and a test event on the *Suggestions* calendar, 2026-11-08). Only open item: the
+AllTera Tribe URL.
 
 Sequence: M1 → M2 → M3 → M4 → M5. Inside M5, news and the extra outputs are
 independent and can be built in either order.
