@@ -67,12 +67,12 @@ returns schema-validated `Item`s.
 
 | Adapter | What it does | Cost / limits |
 |---|---|---|
-| `web_search` | For each enabled topic routed to the plugin (highest weight first, at most `max_queries`, default 3), the Extractor runs one Claude request with the server-side web search tool (one search) and the web fetch tool (up to `fetch_pages` result pages, default 2), and extracts items. Snippets rarely contain dates, so without fetching few dated events are found. Optional `allowed_domains`, `query` template. Items must link to a site the search or fetch returned. | measured with Opus 5.5: ~$0.10 per query without fetching, ~$0.30–0.45 with 2 fetched pages; needs `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
+| `web_search` | For each enabled topic routed to the plugin (highest weight first, at most `max_queries`, default 3), the Extractor runs one Claude request with the server-side web search tool (one search) and the web fetch tool (up to `fetch_pages` result pages, default 2), and extracts items. Snippets rarely contain dates, so without fetching few dated events are found. Optional `allowed_domains`, `query` template. Items must link to a site the search or fetch returned. | measured with Opus 5.5: ~$0.10 per query without fetching, ~$0.30–0.45 with 2 fetched pages (`anthropic_api`); included in the plan with `claude_code`; needs a working LLM provider |
 | `web_page` | Fetches `url`. **Feed discovery first** (`feed: auto`; or `none`, or an explicit feed URL): an advertised `.ics` feed is parsed by the plugin's iCal adapter with no LLM; an RSS/Atom feed (preferring the feed under the page's own path, e.g. a WordPress category feed; comment feeds ignored) has its entries from the last 60 days extracted, because entries are articles whose event dates are in the text. Otherwise the HTML is reduced to text and extracted. Results are cached per document hash (including empty results), so unchanged entries and pages cost no LLM call. | one batched LLM call per run with new or changed documents; respects `robots.txt`; 1 request/s per host |
 
 Rules: fetched pages and search results are untrusted data, passed to the LLM in delimited
 blocks with an instruction to ignore embedded instructions; every extracted item must carry a
-source URL; items whose date or URL fails validation are dropped. Without an API key, `web_*`
+source URL; items whose date or URL fails validation are dropped. Without a working LLM provider, `web_*`
 sources are skipped with a warning (feed-discovered sources still work).
 Site-specific scraping code is avoided: if a generic `web_page` source proves unreliable, the
 fix is a dedicated adapter in the plugin, written later.
@@ -81,15 +81,15 @@ fix is a dedicated adapter in the plugin, written later.
 The `Ranker` and `Extractor` call the LLM through one kernel interface (`LLM.parse`: system
 prompt, untrusted content, pydantic schema, optional web search budget → validated object plus
 the URLs the search/fetch tools returned). `PERSONAL_AGENT_LLM_PROVIDER` selects the
-implementation; plugins never know which one runs. Two vendors, each by API key or by
-subscription:
+implementation; plugins never know which one runs. Two vendors, by API key or (Claude) by
+subscription; `claude_code` is the default:
 
 | Provider | Vendor | How | Credentials | Billing | Status |
 |---|---|---|---|---|---|
-| `anthropic_api` (default) | Claude | Anthropic SDK: structured outputs, adaptive thinking, effort, server-side refusal fallbacks, server web search + web fetch tools | `PERSONAL_AGENT_ANTHROPIC_API_KEY` | pay per use; exact cost per run | M2 |
-| `claude_code` | Claude | Claude Code CLI, non-interactive (`claude -p`) subprocess; only its web search and web fetch tools allowed | local Claude Code login with a Claude Pro/Max subscription; cloud: `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) | included in the plan, within its usage limits | M3 |
-| `gemini_api` | Gemini | Google Gen AI SDK (`google-genai`): JSON output with a response schema, Google Search grounding and URL context tools; source URLs from grounding metadata | `PERSONAL_AGENT_GEMINI_API_KEY` (Google AI Studio key) | pay per use (or the API's free tier, with lower limits); cost per run from token usage | M3 |
-| `gemini_cli` | Gemini | Gemini CLI, non-interactive (`gemini -p`) subprocess; only its Google Search and web fetch tools allowed | local Gemini CLI login with a Google account (Google AI Pro/Ultra raises the limits); cloud: to be confirmed in the M3 spike, otherwise use `gemini_api` | included in the subscription or free quota, within its limits | M3 |
+| `anthropic_api` | Claude | Anthropic SDK: structured outputs, adaptive thinking, effort, server-side refusal fallbacks, server web search + web fetch tools | `PERSONAL_AGENT_ANTHROPIC_API_KEY` | pay per use; exact cost per run | M2 |
+| `claude_code` (default) | Claude | Claude Code CLI, non-interactive (`claude -p --output-format stream-json --json-schema …`) subprocess in an empty temp folder, with `--safe-mode --strict-mcp-config --disable-slash-commands` and its own `--system-prompt` (user customizations off: a call is ~1k tokens instead of ~260k); only `WebSearch`/`WebFetch` allowed, `--max-turns` from the search budget; answer from `structured_output`, result URLs from the stream's tool results; default model `claude-sonnet-5-5` | local Claude Code login with a Claude Pro/Max subscription; cloud: `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) | included in the plan, within its usage limits; run shows the CLI's notional API cost | M3 |
+| `gemini_api` | Gemini | Google Gen AI SDK (`google-genai`): JSON output with a response schema, Google Search grounding and URL context tools; source URLs from grounding metadata (Gemini 3+ allows schema output and grounding in one request); default model `gemini-3.8-flash` | `PERSONAL_AGENT_GEMINI_API_KEY` (Google AI Studio key) | pay per use (or the API's free tier, with lower limits); cost per run from token usage | M3 |
+| `gemini_cli` | Gemini | Gemini CLI, non-interactive (`gemini -p`) subprocess | *M3 spike (2026-11-08): Gemini CLI 0.36 and 0.67 refuse personal Google accounts (`IneligibleTierError`: "no longer supported for Gemini Code Assist for individuals")* | – | deferred |
 
 Rules for all providers:
 - Same prompts, untrusted-content delimiting, JSON validated against the pydantic schema (one
@@ -266,8 +266,8 @@ so interests, sources and outputs are edited as ordinary notes on any device.
 - **US-15** As a user, the agent runs on a schedule (news daily, events weekly).
 - **US-16** As a user, `agent run --dry-run` previews what each output would publish, without
   writing anything.
-- **US-27** As a user, I choose the LLM behind the agent: Claude or Gemini, each with an API key
-  or with a subscription I already pay for, by changing one setting.
+- **US-27** As a user, I choose the LLM behind the agent: my Claude subscription (default), or
+  Claude or Gemini with an API key, by changing one setting.
 - **US-28** As a user, a subscription-based run never silently switches to paid API usage.
 
 ### Platforms
@@ -415,8 +415,8 @@ without a git vault), is reported as a warning and skipped.
       (whole-phrase, case-insensitive, on title, summary and location).
    4. Kernel `Ranker`: one LLM call per plugin (≤ 50 candidates), input = enabled topics for
       the plugin, dislikes, `rank_hints`, last 20 feedback examples. Output is JSON validated
-      against a schema: `[{id, score 0–100, reason, duplicate_of?}]`. Without an API key, a
-      keyword-overlap ranker is used.
+      against a schema: `[{id, score 0–100, reason, duplicate_of?}]`. Without a working LLM
+      provider, a keyword-overlap ranker is used.
    5. Keep top `max_items` with score ≥ `threshold`.
 4. **Route:** for each enabled output, select ranked items whose plugin is in `plugins`, with
    score ≥ `min_score`, that the output `accepts()`, and that have no delivery to that output yet.
@@ -479,8 +479,8 @@ personal_agent/
     models.py      # Item, RankedItem, RankHints, Delivery, Feedback
     plugin.py      # ContentPlugin / OutputPlugin protocols, registry, entry points
     runner.py      # run loop + router
-    services/      # store, ranker, extractor, llm (interface + anthropic_api),
-                   # llm_claude_code, llm_gemini_api, llm_gemini_cli,
+    services/      # store, ranker, extractor, llm (interface, selection, anthropic_api),
+                   # llm_common, llm_claude_code, llm_gemini_api,
                    # availability, google, http, checklist
     adapters/      # generic: web_search.py, web_page.py (feed discovery + extraction)
     platform.py    # data dirs, scheduler install (schtasks / cron / launchd)
@@ -533,7 +533,7 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
     LLM call, and a page that links an iCal feed is parsed without the LLM.
 14. Text such as "ignore previous instructions" inside a fetched page or search result has no
     effect on extraction or ranking (fixture test).
-15. With each of `claude_code`, `gemini_api` and `gemini_cli` selected and no other provider's
+15. With each of `claude_code` and `gemini_api` selected (`gemini_cli` deferred) and no other provider's
     credentials set, a run ranks and extracts events; CLI subprocesses receive no API key; a
     missing credential, logged-out CLI or reached limit degrades to keyword ranking with a
     warning.
@@ -546,15 +546,10 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 - Home city and initial interests.
 - Sources that publish only on social media (Instagram, Facebook) are not fetchable without
   login and are out of scope; is a manual import (e.g. an exported `.ics`) enough for those?
-- Cost of `web_search`: keep Opus 5.5 with a small `max_queries`, run web search weekly only,
-  use a cheaper model (`PERSONAL_AGENT_MODEL`) for extraction, or use a subscription provider
-  (`claude_code` or `gemini_cli`, M3) or `gemini_api`?
-- CLI providers (`claude_code`, `gemini_cli`): which flags do the installed versions support for
-  JSON output, tool allowlists and model selection; how are usage limits reported; can
-  `gemini_cli` run in cloud mode on a subscription? (M3 spike.)
-- Default Gemini model and its measured cost per run, and whether structured JSON output and
-  Google Search grounding work together in one request on that model (M3 spike; otherwise two
-  requests: grounded search, then structured extraction).
+- Cost of `web_search`: resolved for now by making `claude_code` (subscription) the default;
+  open: do daily scheduled runs fit within a Pro plan's usage limits (M4 quality check)?
+- Measured cost per run on `gemini_api` (needs a key; list prices are in the cost estimate).
+- `gemini_cli`: revisit if Google re-enables CLI access for personal accounts.
 - Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
   cloud mode; otherwise use Windows local mode.)
 - Obsidian: is the vault git-synced (cloud mode works) or Obsidian Sync-only (local mode)?

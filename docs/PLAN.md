@@ -9,7 +9,7 @@ Claude-subscription and Gemini providers), then news and the remaining outputs (
 | ----- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal                   | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline                                                         | 2, 3, 4*, 6, 10     |
 | M2 ✅ | **Smart events in Calendar**: LLM, web sources, Google Calendar                     | Events from web search, web pages and iCal feeds, LLM-ranked, on the *Suggestions* calendar                                                          | 5, 7, 9, 12, 13, 14 |
-| M3    | **Alternative LLM providers**: Claude subscription, Gemini API, Gemini subscription | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code`, `gemini_api` or `gemini_cli` runs ranking, extraction and web search without the Claude API key | 15, 16              |
+| M3 ✅ | **Alternative LLM providers**: Claude subscription (now the default), Gemini API | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code` or `gemini_api` runs ranking, extraction and web search without the Claude API key (`gemini_cli` deferred) | 15, 16              |
 | M4    | **Events MVP**: feedback loop + unattended runs                                     | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone                                                                  | 8, 11               |
 | M5    | **News & more outputs**, then v1 release                                            | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0`                                                              | 1, all              |
 
@@ -18,6 +18,23 @@ Claude-subscription and Gemini providers), then news and the remaining outputs (
 ✅ M2: done and verified live on 2026-11-08 (LLM ranking, `web_search`, a `web_page` source with
 feed discovery, a Meetup iCal source, Google sign-in, free/busy, and a test event on the
 *Suggestions* calendar). AllTera Tribe was dropped (no website found).
+
+✅ M3: built on 2026-11-08. `claude_code` verified live (`agent run --dry-run` with no API key:
+5 calls, 3 web searches, ~48 s, included in plan, ~$0.14 at API prices) and made the **default
+provider**. `gemini_api` built and contract-tested against SDK fakes; its live check waits for
+a `PERSONAL_AGENT_GEMINI_API_KEY`. `gemini_cli` deferred: the spike found Gemini CLI refuses
+personal Google accounts. Spike findings (recorded in `tests/fixtures/llm/`):
+- Claude Code 2.1: `-p --output-format stream-json --verbose --json-schema` gives the answer as
+  `structured_output`; WebSearch results arrive as `tool_use_result.results[].content[].url`,
+  WebFetch as `tool_use_result.{url, code}`. Without `--safe-mode --strict-mcp-config
+  --disable-slash-commands --system-prompt …` one tiny call loaded ~260k tokens of user setup
+  (plugins, MCP, skills); with them, ~1.3k. Logged out → `is_error: true`, `result: "Not logged
+  in · Please run /login"`, exit code 1.
+- Gemini API: default `gemini-3.8-flash` ($0.75 / $3.75 per M tokens until 2026-12-31, free
+  tier); Gemini 3+ supports schema output with Google Search grounding and URL context in one
+  request; grounding search $0.014 per query after 5,000 free a month.
+- Gemini CLI 0.36 and 0.67: `IneligibleTierError` ("no longer supported for Gemini Code Assist
+  for individuals… migrate to Antigravity").
 
 Sequence: M1 → M2 → M3 → M4 → M5. Inside M5, news and the extra outputs are
 independent and can be built in either order.
@@ -31,7 +48,7 @@ independent and can be built in either order.
 | M2        | Home city, timezone, initial topics for `interests.md`                                                                                                                                                                           |
 | M2 ✅     | Google Cloud project `personal-agent` with Calendar API enabled and a **Desktop app** OAuth client (done; app in **Testing**, so the sign-in expires every 7 days)                                                   |
 | M4        | Publish the OAuth app (**In production**) so scheduled runs don't lose the sign-in weekly; needs a public home page and privacy-policy link on the Branding page                                                             |
-| M3        | Whichever providers you want: Claude Code signed in with your subscription (`claude`, then `/login`; for cloud, `claude setup-token`); a Gemini API key from Google AI Studio; Gemini CLI signed in with your Google account |
+| M3 ✅     | Claude Code signed in with your subscription (done; for cloud, `claude setup-token` in M4); optional: a Gemini API key from Google AI Studio for the `gemini_api` live check |
 | M4        | Decide: cloud mode (private repo OK?) and/or Windows local mode                                                                                                                                                                    |
 | M5        | Obsidian vault path and how it syncs (git or Obsidian Sync)                                                                                                                                                                        |
 
@@ -120,7 +137,10 @@ fake Google client for idempotency, namespace and scopes (ACs 5, 7, 12); busy-sl
 **Done when:** a real run shows LLM-ranked events from all three sources on the *Suggestions*
 calendar on your phone, with no overlap with busy slots.
 
-## M3 — Alternative LLM providers: Claude subscription and Gemini
+## M3 — Alternative LLM providers: Claude subscription and Gemini ✅
+
+> Built as planned except: `claude_code` became the default provider, and `gemini_cli` is
+> deferred (see the M3 note at the top).
 
 Goal: besides the pay-per-use Claude API (default, done in M2), run the agent's LLM work on
 
@@ -205,7 +225,7 @@ Goal: the agent runs by itself every day and learns from what you keep or delete
 
 - `.github/workflows/agent.yml`: daily `schedule` + `workflow_dispatch`; `concurrency` group;
   `agent.db` on the orphan `state` branch; commit `digests/`; secrets
-  `PERSONAL_AGENT_ANTHROPIC_API_KEY` or `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (per provider),
+  `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (default provider; the workflow installs Claude Code) or an API key (per provider),
   `PERSONAL_AGENT_GOOGLE_TOKEN_JSON`; run-log artifact (items, scores, cost).
 - `kernel/platform.py` + `agent schedule install|remove`: Task Scheduler on Windows,
   cron/launchd elsewhere.

@@ -4,10 +4,11 @@ How to install, configure and run personal-agent. For recurring upkeep (re-signi
 checks, key rotation, backups), see [`OPERATIONS.md`](OPERATIONS.md). For the design, see [`SPEC.md`](SPEC.md);
 for what is built and what is next, see [`PLAN.md`](PLAN.md).
 
-> **What works today (M1 + M2):** events from iCal, web pages and web search; LLM ranking
-> with an API key; a markdown digest; suggestions in Google Calendar. **Not yet:** a Claude
-> subscription or Gemini (API key or subscription) as the LLM (M3), reading back your feedback and scheduled runs (M4), news,
-> Obsidian, Google Tasks and email (M5).
+> **What works today (M1–M3):** events from iCal, web pages and web search; LLM ranking on
+> your Claude Pro/Max plan (default), a Claude API key or a Gemini API key; a markdown digest;
+> suggestions in Google Calendar. **Not yet:** reading back your feedback and scheduled runs
+> (M4), news, Obsidian, Google Tasks and email (M5). Gemini CLI is deferred (see
+> [Choosing an LLM provider](#choosing-an-llm-provider)).
 
 ---
 
@@ -30,19 +31,12 @@ agent --config-dir examples/demo run --dry-run
 It reads a local calendar file, drops events that fail your filters (a disliked mixer, a
 weekday-morning workshop, an event in Porto, a €150 gala) and previews the digest.
 
-**3. Add your Anthropic API key** so the agent can search the web and rank with an LLM.
-Use a dedicated key, ideally in its own Console workspace with a monthly spend limit:
+**3. Sign in to Claude Code** so the agent can search the web and rank with an LLM. By
+default it uses your Claude Pro/Max plan through [Claude Code](https://claude.com/claude-code):
+install it, run `claude` once and `/login` with your Pro/Max account. Nothing else to set.
 
-```powershell
-setx PERSONAL_AGENT_ANTHROPIC_API_KEY "sk-ant-..."   # Windows; then open a new terminal
-```
-```bash
-export PERSONAL_AGENT_ANTHROPIC_API_KEY="sk-ant-..."  # Linux/macOS
-```
-
-The agent reads only this variable, never the generic `ANTHROPIC_API_KEY`. Prefer your
-Claude Pro/Max subscription, or Gemini, instead? That arrives in M3; see
-[Choosing an LLM provider](#choosing-an-llm-provider-planned-m3).
+Prefer pay-per-use with a Claude or Gemini API key? See
+[Choosing an LLM provider](#choosing-an-llm-provider).
 
 **4. Describe what you like** in [`config/interests.md`](../config/interests.md) (city,
 budget, topics) and check which sources are on in [`config/sources.md`](../config/sources.md).
@@ -235,28 +229,32 @@ agent warns you when a permission is missing.
 
 ---
 
-## Choosing an LLM provider (planned, M3)
+## Choosing an LLM provider
 
-> Today only `anthropic_api` (a Claude API key) is built. The other providers arrive in M3;
-> this section describes how they will work.
+The agent needs an LLM to rank events, read web pages and search the web. You can use your
+Claude subscription (the default) or pay per use with a Claude or Gemini API key:
 
-The agent needs an LLM to rank events, read web pages and search the web. You can use Claude or
-Gemini, each with an API key (pay per use) or with a subscription:
-
-| Provider | Vendor | You need | Billing |
-|---|---|---|---|
-| `anthropic_api` (default) | Claude | an Anthropic API key | pay per use |
-| `claude_code` | Claude | Claude Code, signed in with a Claude Pro or Max plan | included in your plan |
-| `gemini_api` | Gemini | a Gemini API key from Google AI Studio | pay per use, or the free tier |
-| `gemini_cli` | Gemini | Gemini CLI, signed in with your Google account (Google AI Pro/Ultra for higher limits) | included in your subscription or free quota |
+| Provider | Vendor | You need | Billing | Default model |
+|---|---|---|---|---|
+| `claude_code` (default) | Claude | Claude Code, signed in with a Claude Pro or Max plan | included in your plan | `claude-sonnet-5-5` |
+| `anthropic_api` | Claude | an Anthropic API key | pay per use | `claude-opus-5-5` |
+| `gemini_api` | Gemini | a Gemini API key from Google AI Studio | pay per use, or the free tier | `gemini-3.8-flash` |
+| `gemini_cli` | Gemini | *deferred*: Google no longer accepts Gemini CLI sign-ins from personal accounts | – | – |
 
 Pick one with `PERSONAL_AGENT_LLM_PROVIDER`; the rest of your setup doesn't change.
 
-**Claude subscription (`claude_code`)**
+**Claude subscription (`claude_code`, default)**
 1. Install Claude Code and sign in: run `claude`, then `/login` with your Pro/Max account.
-2. `setx PERSONAL_AGENT_LLM_PROVIDER claude_code` (open a new terminal afterwards).
+2. That's it. The agent runs `claude -p` with your customizations switched off (no plugins,
+   MCP servers or skills, so each call stays small) and only web search and web fetch allowed.
 3. Cloud mode: create a token with `claude setup-token` and store it as the repo secret
    `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN`.
+
+**Claude API key (`anthropic_api`)**
+1. Create a dedicated key, ideally in its own Console workspace with a monthly spend limit.
+2. `setx PERSONAL_AGENT_ANTHROPIC_API_KEY "sk-ant-..."` and
+   `setx PERSONAL_AGENT_LLM_PROVIDER anthropic_api` (Windows; then open a new terminal; on
+   Linux/macOS use `export`).
 
 **Gemini API key (`gemini_api`)**
 1. Create a key in [Google AI Studio](https://aistudio.google.com/), preferably in its own
@@ -264,20 +262,18 @@ Pick one with `PERSONAL_AGENT_LLM_PROVIDER`; the rest of your setup doesn't chan
 2. `setx PERSONAL_AGENT_GEMINI_API_KEY "..."` and `setx PERSONAL_AGENT_LLM_PROVIDER gemini_api`.
 3. Cloud mode: store the key as the repo secret `PERSONAL_AGENT_GEMINI_API_KEY`.
 
-**Google subscription (`gemini_cli`)**
-1. Install Gemini CLI and sign in with your Google account (run `gemini` once and choose
-   *Login with Google*).
-2. `setx PERSONAL_AGENT_LLM_PROVIDER gemini_cli`.
-3. Cloud mode: not confirmed yet; if it turns out to be unsupported, use `gemini_api` in the cloud.
+**Gemini CLI (`gemini_cli`): deferred.** Tested in November 2026: Gemini CLI (0.36 and 0.67)
+refuses sign-in with a personal Google account ("no longer supported for Gemini Code Assist for
+individuals"). Use `gemini_api` for Gemini.
 
 **How they compare**
 
-| | API key providers | Subscription providers (CLI) |
+| | API key providers | Claude subscription (`claude_code`) |
 |---|---|---|
-| Cost | pay per use, shown after every run | included, within your plan's limits (shared with your own use) |
-| Speed | faster | slower (starts a CLI process per call) |
-| Control | exact model, effort, guaranteed JSON shape | the CLI's settings; output validated afterwards |
-| Cloud mode | yes | Claude: yes (token); Gemini: to be confirmed |
+| Cost | pay per use, shown after every run | included, within your plan's limits (shared with your own use); the run shows what it would have cost on the API |
+| Speed | faster | slower (starts a CLI process per call; ~10 s per call, a full run takes about a minute) |
+| Control | exact model and effort, guaranteed JSON shape | model and effort via flags; JSON checked against the schema |
+| Cloud mode | yes | yes (token) |
 
 Things to know:
 - Each provider reads only its own variable. The agent never uses the generic
@@ -318,11 +314,11 @@ calls and their estimated cost, and any warnings.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PERSONAL_AGENT_LLM_PROVIDER` | `anthropic_api`; from M3 also `claude_code`, `gemini_api`, `gemini_cli` | `anthropic_api` |
-| `PERSONAL_AGENT_ANTHROPIC_API_KEY` | Anthropic key for `anthropic_api`; without it, keyword ranking only and web sources are skipped | – |
-| `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | subscription token for `claude_code` in cloud mode (from M3); locally the Claude Code login is used | – |
-| `PERSONAL_AGENT_GEMINI_API_KEY` | Google AI Studio key for `gemini_api` (from M3) | – |
-| `PERSONAL_AGENT_MODEL` | model of the chosen vendor for ranking and extraction | `claude-opus-5-5` for Claude providers; a Gemini default for Gemini providers |
+| `PERSONAL_AGENT_LLM_PROVIDER` | `claude_code`, `anthropic_api` or `gemini_api` (`gemini_cli` is deferred); without a working provider, keyword ranking only and web sources are skipped | `claude_code` |
+| `PERSONAL_AGENT_ANTHROPIC_API_KEY` | Anthropic key for `anthropic_api` | – |
+| `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | subscription token for `claude_code` in cloud mode; locally the Claude Code login is used | – |
+| `PERSONAL_AGENT_GEMINI_API_KEY` | Google AI Studio key for `gemini_api` | – |
+| `PERSONAL_AGENT_MODEL` | model of the chosen vendor for ranking and extraction (a model of another vendor is ignored with a warning) | `claude-sonnet-5-5` (`claude_code`), `claude-opus-5-5` (`anthropic_api`), `gemini-3.8-flash` (`gemini_api`) |
 | `PERSONAL_AGENT_EFFORT` | reasoning effort: `low`, `medium`, `high` (mapped to the vendor's control where available) | `low` |
 | `PERSONAL_AGENT_CONFIG_DIR` | folder with the three config files | `./config` |
 | `PERSONAL_AGENT_DATA_DIR` | folder for `agent.db` (state and caches) | platform data folder, e.g. `%LOCALAPPDATA%\personal-agent` |
@@ -333,7 +329,12 @@ calls and their estimated cost, and any warnings.
 
 ## Costs
 
-The agent prints the estimated cost of every run. Measured with Claude Opus 5.5:
+With the default `claude_code` provider, runs cost nothing extra: they use your Claude plan's
+usage limits, and each run prints `included in plan (~$X at API prices)` so you can see how
+much of the plan a run uses (a full run with 3 web searches measured ~$0.14 on Sonnet 5.5).
+
+With an API key provider the agent prints the estimated cost of every run. Measured with
+Claude Opus 5.5 (`anthropic_api`):
 
 | Step | Typical cost |
 |---|---|
@@ -347,10 +348,11 @@ Web search is the main cost because opened pages add tens of thousands of tokens
 less: lower `max_queries`, set `fetch_pages: 0` (cheaper, but finds far fewer dated events),
 uncheck the `web` source on days you don't need it, or set `PERSONAL_AGENT_MODEL` to a
 cheaper model such as `claude-sonnet-5-5`. A spend limit on the key's Console workspace is
-the safety net. From M3 you can also use Gemini (`gemini_api`, with its own pricing and free
-tier) or run on a subscription (`claude_code` or `gemini_cli`) within your plan's limits; see
-[Choosing an LLM provider](#choosing-an-llm-provider-planned-m3). The costs above were
-measured with Claude Opus 5.5; Gemini costs will be measured in M3.
+the safety net. `gemini_api` (default `gemini-3.8-flash`: $0.75 / $3.75 per million input /
+output tokens until 2026-12-31, then double; Google Search grounding free for 5,000 queries a
+month, then $0.014 each) is much cheaper per call; its estimate uses those list prices.
+Gemini costs per run have not been measured live yet (no key set up). See
+[Choosing an LLM provider](#choosing-an-llm-provider).
 
 ---
 
@@ -372,7 +374,10 @@ re-extract everything once. Nothing in it is needed by Google: the calendar keep
 
 | Symptom | Fix |
 |---|---|
-| `PERSONAL_AGENT_ANTHROPIC_API_KEY not set` | set it (or choose another provider), then **restart the terminal or VS Code** (running programs don't see new variables) |
+| `No LLM (Claude Code CLI (`claude`) not found on PATH)` | install Claude Code and sign in, or choose another provider |
+| `LLM provider unavailable (Claude Code: Not logged in ...)` | run `claude`, then `/login` |
+| `LLM provider unavailable (... usage limit reached ...)` | your plan's limit is used up for now; the run used keyword ranking. Try later or switch provider for a day |
+| `No LLM (PERSONAL_AGENT_..._API_KEY not set)` | set it (or choose another provider), then **restart the terminal or VS Code** (running programs don't see new variables) |
 | `source type 'web_page' ... needs a 'url'` | fill in `url:` (a value of `TBD` counts as missing) |
 | `SSL ... trust relationship` / certificate errors | try the `www.` address of the site |
 | `robots.txt disallows fetching` | the site opts out of bots; use `web_search` with `allowed_domains` instead |

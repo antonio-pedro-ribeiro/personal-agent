@@ -4,7 +4,7 @@ What to do regularly to keep personal-agent working. For first-time setup, see
 [`USAGE.md`](USAGE.md).
 
 > Today you run the agent by hand (`agent run`). Scheduled, unattended runs come in M4; items
-> marked *(from M4)* or *(from M3)* only apply once those milestones are built.
+> marked *(from M4)* only apply once that milestone is built.
 
 ## At a glance
 
@@ -12,7 +12,7 @@ What to do regularly to keep personal-agent working. For first-time setup, see
 |---|---|---|
 | **Every 7 days** (while the Google app is in Testing) | [Re-run `agent auth google`](#google-sign-in-every-7-days) | Google expires the sign-in of apps in Testing |
 | After every run | [Read the warnings](#after-every-run) | Broken sources and expired sign-ins show up there |
-| Weekly | [Check LLM spend](#weekly-check-llm-spend) | Web search is the main cost |
+| Weekly | [Check LLM spend](#weekly-check-llm-spend) | API providers: web search is the main cost; `claude_code`: plan limits |
 | Weekly | [Give feedback](#weekly-give-feedback) | Feedback steers the ranking *(read back from M4)* |
 | Monthly | [Review sources and interests](#monthly-review-sources-and-interests) | Sites change, feeds move, interests drift |
 | Monthly | [Update the agent and its dependencies](#monthly-update) | Security fixes; API changes |
@@ -62,21 +62,23 @@ Each run ends with a summary and a **Warnings** list. Act on:
 | `source '<id>' failed: ...` | `agent sources test <id>`; fix or uncheck the source |
 | `robots.txt disallows fetching ...` | uncheck it, or replace it with `web_search` limited to that site (`allowed_domains`) |
 | `Google connection failed` / `Google is not connected` | [re-run `agent auth google`](#google-sign-in-every-7-days) |
-| `LLM ranking failed ... used keywords` | check the key, the spend limit and the Anthropic status page |
-| `PERSONAL_AGENT_ANTHROPIC_API_KEY not set` | the variable is missing in this terminal; restart it, or set the key again |
+| `LLM ranking failed ... used keywords` | `claude_code`: check you are signed in and within your plan's limits; API providers: check the key, the spend limit and the vendor's status page |
+| `LLM provider unavailable (... Not logged in ...)` | run `claude`, then `/login` |
+| `No LLM (... not set)` / `No LLM (... not found on PATH)` | the provider's key is missing in this terminal (restart it, or set the key again), or the CLI isn't installed |
 
 A run with warnings still completes; nothing needs fixing in a hurry.
 
 ## Weekly: check LLM spend
 
-- Each run prints `LLM: ... ~$0.xx`. Web search is the main cost (about $0.30–0.45 per query
-  with Opus 5.5); see [USAGE.md → Costs](USAGE.md#costs).
-- Once a week, look at the usage of the `personal-agent` key in the
-  [Anthropic Console](https://console.anthropic.com/) and confirm it's within the workspace's
-  monthly spend limit.
-- Too expensive? Lower `max_queries` or `fetch_pages` in `config/sources.md`, uncheck `web` on
-  some runs, or switch model or provider (`PERSONAL_AGENT_MODEL`; subscription providers *from
-  M3*).
+- With the default `claude_code` provider there is no bill: each run prints
+  `included in plan (~$X at API prices)`, and the cost is your plan's usage limits (see below).
+- With an API key provider each run prints `LLM: ... ~$0.xx`. Web search is the main cost
+  (about $0.30–0.45 per query with Opus 5.5); see [USAGE.md → Costs](USAGE.md#costs). Once a
+  week, check the key's usage in the [Anthropic Console](https://console.anthropic.com/) or
+  Google AI Studio and confirm it's within the monthly spend limit or budget alert.
+- Too expensive or too slow? Lower `max_queries` or `fetch_pages` in `config/sources.md`,
+  uncheck `web` on some runs, or switch model or provider (`PERSONAL_AGENT_MODEL`,
+  `PERSONAL_AGENT_LLM_PROVIDER`).
 
 ## Weekly: give feedback
 
@@ -114,7 +116,8 @@ reinstall.
 
 | Credential | Where it lives | How to rotate |
 |---|---|---|
-| Anthropic API key | env var `PERSONAL_AGENT_ANTHROPIC_API_KEY` | create a new key in the Console, `setx` it, restart the terminal, run once, then delete the old key |
+| Claude Code cloud token *(from M4)* | repo secret `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, update the secret |
+| Anthropic / Gemini API key (if used) | env var `PERSONAL_AGENT_ANTHROPIC_API_KEY` / `PERSONAL_AGENT_GEMINI_API_KEY` | create a new key in the Console, `setx` it, restart the terminal, run once, then delete the old key |
 | Google OAuth client | `C:\Users\anton\.config\personal-agent\client_secret.json` | rarely needed; to replace it, create a new Desktop client in Google Cloud, save the JSON there, re-run `agent auth google`, delete the old client |
 | Google sign-in token | Windows Credential Manager (`personal-agent` / `google-token`) | re-running `agent auth google` replaces it |
 | Cloud secrets *(from M4)* | GitHub repo secrets | update them whenever you rotate the local ones |
@@ -151,12 +154,13 @@ Scheduled runs can't click through a browser every week, so before M4:
 After this, the sign-in no longer expires weekly; you'll still see the "unverified app" warning
 when signing in, which is fine for personal use.
 
-## From M3: subscription providers
+## Claude subscription (`claude_code`, the default)
 
-If you use `claude_code` or `gemini_cli`:
-- Stay signed in to Claude Code / Gemini CLI on this PC; if a run warns that the CLI is logged
-  out, sign in again (`claude` → `/login`, or `gemini`).
-- Usage limits are shared with your own use of Claude or Gemini; heavy days may leave the agent
-  with keyword ranking only.
+- Stay signed in to Claude Code on this PC; if a run warns that the CLI is logged out, sign in
+  again (`claude` → `/login`).
+- Usage limits are shared with your own use of Claude; heavy days may leave the agent with
+  keyword ranking only (the run warns and still completes).
+- After a Claude Code update, run `agent run --dry-run` once: if its output format changed, the
+  run warns instead of ranking.
 - Cloud mode with `claude_code`: refresh `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` when it
   expires (`claude setup-token`).

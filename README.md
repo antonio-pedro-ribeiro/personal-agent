@@ -4,9 +4,9 @@ A personal assistant agent that researches **events** and **news** matching your
 and publishes them where you already work: Google Calendar, Google Tasks, an Obsidian vault,
 a markdown digest, or email.
 
-> **Status:** M1 and M2 built: events from iCal, web pages and web search, LLM ranking, a
-> markdown digest and Google Calendar suggestions. Next: Claude-subscription and Gemini
-> providers (M3), feedback and scheduling (M4), news (M5) ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
+> **Status:** M1–M3 built: events from iCal, web pages and web search, LLM ranking on a
+> Claude Pro/Max plan (default, via Claude Code) or a Claude / Gemini API key, a markdown
+> digest and Google Calendar suggestions. Next: feedback and scheduling (M4), news (M5) ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
 
 ## Try it
 
@@ -107,10 +107,9 @@ agent schedule install|remove    *
 ## Requirements (planned)
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
-- `PERSONAL_AGENT_ANTHROPIC_API_KEY` (needed for web search / web page sources and LLM ranking; without it,
-  only feed sources and a keyword ranker work), or, from M3: a Claude Pro/Max subscription
-  (Claude Code), a Gemini API key, or a Google account via Gemini CLI
-  (`PERSONAL_AGENT_LLM_PROVIDER`)
+- An LLM for web search / web page sources and ranking (without one, only feed sources and a
+  keyword ranker work): by default Claude Code signed in with a Claude Pro/Max plan; or a Claude
+  or Gemini API key (`PERSONAL_AGENT_LLM_PROVIDER` = `anthropic_api` / `gemini_api`)
 - Google OAuth credentials, if a Google output is enabled
 
 ## Docs
