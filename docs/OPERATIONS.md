@@ -35,7 +35,7 @@ calendar output reports an error, or no busy slots are checked.
 **Fix:**
 
 ```powershell
-agent auth google --client-secrets C:\Users\anton\.config\personal-agent\client_secret.json
+agent auth google --client-secrets $env:USERPROFILE\.config\personal-agent\client_secret.json
 ```
 
 Approve in the browser (click past "Google hasn't verified this app"), then check with:
@@ -133,7 +133,7 @@ reinstall.
 |---|---|---|
 | Claude Code cloud token | repo secret `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, update the secret |
 | Anthropic / Gemini API key (if used) | env var `PERSONAL_AGENT_ANTHROPIC_API_KEY` / `PERSONAL_AGENT_GEMINI_API_KEY` | create a new key in the Console, `setx` it, restart the terminal, run once, then delete the old key |
-| Google OAuth client | `C:\Users\anton\.config\personal-agent\client_secret.json` | rarely needed; to replace it, create a new Desktop client in Google Cloud, save the JSON there, re-run `agent auth google`, delete the old client |
+| Google OAuth client | `%USERPROFILE%\.config\personal-agent\client_secret.json` | rarely needed; to replace it, create a new Desktop client in Google Cloud, save the JSON there, re-run `agent auth google`, delete the old client |
 | Google sign-in token | Windows Credential Manager (`personal-agent` / `google-token`) | re-running `agent auth google` replaces it |
 | Cloud secrets | GitHub repo secrets | update them whenever you rotate the local ones |
 
@@ -164,11 +164,15 @@ The agent's memory is one file: `agent.db` in `%LOCALAPPDATA%\personal-agent\` (
 
 Scheduled runs can't click through a browser every week, so before scheduling:
 
-1. Have a public **home page** and **privacy policy** URL for the app (for example, a public
-   repo with a `PRIVACY.md`).
-2. Google Cloud → *Google Auth Platform → Branding*: fill in those links and save.
-3. *Audience → Publish app*; confirm.
-4. Re-run `agent auth google` once.
+1. Make sure the repo is public and `PRIVACY.md` is pushed to `main`.
+2. Google Cloud console, project `personal-agent` → *Google Auth Platform → Branding*:
+   - App home page: `https://github.com/antonio-pedro-ribeiro/personal-agent`
+   - Privacy policy: `https://github.com/antonio-pedro-ribeiro/personal-agent/blob/main/PRIVACY.md`
+   - Leave *Authorized domains* empty if it lets you save; if it asks for one, add
+     `github.com`. Save.
+3. *Audience → Publish app*; confirm. Ignore the offer to start verification: for personal use
+   an unverified app in production works (up to 100 users, with a warning screen).
+4. Re-run `agent auth google` once; tokens issued before publishing still expire.
 
 After this, the sign-in no longer expires weekly; you'll still see the "unverified app" warning
 when signing in, which is fine for personal use.

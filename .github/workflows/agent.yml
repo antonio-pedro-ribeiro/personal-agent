@@ -10,7 +10,8 @@
 #   PERSONAL_AGENT_ANTHROPIC_API_KEY        only if the provider is anthropic_api
 #   PERSONAL_AGENT_GEMINI_API_KEY           only if the provider is gemini_api
 #   PERSONAL_AGENT_GOOGLE_TOKEN_JSON        from `agent auth google --print-token`
-# Variables (optional): PERSONAL_AGENT_LLM_PROVIDER, PERSONAL_AGENT_MODEL, PERSONAL_AGENT_EFFORT
+# Variables: PERSONAL_AGENT_CLOUD_MODE=true to enable this workflow (only in a PRIVATE repo);
+#   optional PERSONAL_AGENT_LLM_PROVIDER, PERSONAL_AGENT_MODEL, PERSONAL_AGENT_EFFORT
 
 name: Agent
 
@@ -33,6 +34,9 @@ concurrency:
 
 jobs:
   run:
+    # Off unless the repo variable PERSONAL_AGENT_CLOUD_MODE is "true": in a public repo the
+    # state branch, digests and run logs would be public (use local mode instead).
+    if: vars.PERSONAL_AGENT_CLOUD_MODE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

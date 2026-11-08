@@ -35,9 +35,12 @@ First set it up and run it by hand ([`docs/USAGE.md`](docs/USAGE.md) quickstart:
 `config/`, `agent auth google`, `agent run --dry-run`, `agent run`). Then pick how it runs
 every day:
 
-**Cloud mode** (GitHub Actions; none of your devices needs to stay on)
+**Cloud mode** (GitHub Actions; none of your devices needs to stay on). Off by default: this
+repository is public, and cloud mode commits your digests and state to it, so use it only in
+a **private** copy (fork or clone, then make it private).
 
-1. Keep this repository **private** (it holds your interests, digests and state).
+1. In your private copy, add the repo variable `PERSONAL_AGENT_CLOUD_MODE` = `true`
+   (*Settings → Secrets and variables → Actions → Variables*).
 2. Publish the Google app so the sign-in doesn't expire weekly
    ([`docs/OPERATIONS.md`](docs/OPERATIONS.md#once-publish-the-google-app)), then run
    `agent auth google --print-token`.

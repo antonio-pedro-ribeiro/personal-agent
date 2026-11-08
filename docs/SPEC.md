@@ -165,12 +165,13 @@ Gmail, a browser). No device has to stay on, and there is no native app in v1.
 **Deployment modes**
 | Mode | Runs on | Scheduler | State | Status |
 |---|---|---|---|---|
-| **Cloud** (default) | GitHub Actions in this (private) repo (`.github/workflows/agent.yml`) | workflow `schedule:` (daily 06:00 UTC) + manual "Run workflow" | `agent.db` and `digests/` committed to an orphan `state` branch | v1 |
+| **Cloud** (opt-in: repo variable `PERSONAL_AGENT_CLOUD_MODE=true`) | GitHub Actions in a **private** repo (`.github/workflows/agent.yml`) | workflow `schedule:` (daily 06:00 UTC) + manual "Run workflow" | `agent.db` and `digests/` committed to an orphan `state` branch | v1 |
 | **Windows local** | Python via `pipx` | Task Scheduler, via `agent schedule install` | `%LOCALAPPDATA%\personal-agent\` | v1 |
 | Linux/macOS local | Python via `pipx` | cron / launchd, via `agent schedule install` | platform data dir | v1 (dev) |
 | Android local (Termux) | — | — | — | **Unsupported.** Doze and app standby defer or kill background jobs, so scheduled runs are unreliable. |
 
-Cloud mode: the workflow checks out the `state` branch into `state/` and runs there with
+Cloud mode: the workflow is off unless the repo variable `PERSONAL_AGENT_CLOUD_MODE` is `true`,
+because in a public repo the state branch, digests and run logs would be public. It checks out the `state` branch into `state/` and runs there with
 `PERSONAL_AGENT_DATA_DIR=state` and config from `config/` on the default branch, so
 `agent.db` and relative output paths (`digests/`) are committed back to `state` after every
 non-dry run, even one with errors (what was delivered must be remembered). It runs
