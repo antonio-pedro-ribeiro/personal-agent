@@ -1,46 +1,49 @@
 # personal-agent
 
-A personal assistant agent that researches **events** and **news** matching your interests,
-sends you a digest, and suggests events into Google Calendar.
+A personal assistant agent that researches **events** and **news** matching your interests
+and publishes them where you already work: Google Calendar, Google Tasks, an Obsidian vault,
+a markdown digest, or email.
 
 > **Status:** design stage. The spec is in [`docs/SPEC.md`](docs/SPEC.md); no code yet.
 
 ## How it works
 
-A small **kernel** runs the loop. Domain logic lives in **plugins**.
+A small **kernel** runs the loop. Everything else is a plugin.
 
 ```
-interests.md + sources.md ─► kernel ─► events plugin ─► Suggestions calendar ─┐
-                                   └─► news plugin ─────────────────────────────┼─► digest
-                         ◄──── feedback (kept/deleted suggestions, 👍/👎) ◄───────┘
+interests.md  sources.md                         outputs.md
+      │           │                                   │
+      ▼           ▼                                   ▼
+ content plugins ──► dedupe · filter · rank ──► route ──► output plugins
+ (events, news)                                           (Google Calendar, Google Tasks,
+                                                           Obsidian, digest, email)
+                         ◄────────── feedback ◄──────────┘
 ```
 
-- **Kernel:** reads config, discovers plugins, runs `sync_feedback → collect → dedupe →
-  filter → rank → deliver`, and provides shared services (SQLite, LLM ranker, calendar,
-  digest).
-- **Plugins:** `events` (iCal, Ticketmaster) and `news` (RSS, Hacker News, GDELT). A new
-  content type is a new plugin; the kernel doesn't change.
-- **Safety:** the agent writes only to a dedicated *Suggestions* calendar. Its Google token
-  can't modify your main calendar (scopes: `calendar.app.created`, `calendar.freebusy`).
+- **Kernel:** reads config, discovers plugins, ranks items with an LLM, routes them to
+  outputs, and collects feedback. It knows nothing about events, news, calendars or notes.
+- **Content plugins:** `events` (iCal, Ticketmaster) and `news` (RSS, Hacker News, GDELT).
+- **Output plugins:** `google_calendar`, `google_tasks`, `obsidian`, `markdown_digest`,
+  `email`. Each also reads back your feedback: deleted calendar entry, completed task, ticked
+  👍/👎 box.
+- **Safety:** each output writes only inside its own calendar, task list or folder. The
+  Google token can't modify your main calendar (`calendar.app.created`, `calendar.freebusy`).
 
 ## Windows and Android
 
 The agent runs headless, by default on a schedule in GitHub Actions, so no device needs to
 stay on. Windows can also run it locally (`pipx` + Task Scheduler). On Android you use apps you
-already have:
-
-- **Google Calendar:** see suggestions; keep = accept, delete = reject
-- **Gmail / browser:** read the digest; tick 👍/👎 boxes in `digests/*.md` on github.com
-- **Browser:** edit `config/*.md` on github.com, or "Run workflow" for an on-demand run
+already have: Google Calendar, Google Tasks, Obsidian, Gmail, a browser. Config files can live
+in your Obsidian vault so you edit them on the phone.
 
 Running the agent itself on Android (Termux) is not supported: background scheduling is
 unreliable there. Details: [`docs/SPEC.md`](docs/SPEC.md#running-on-windows-and-android).
 
 ## Configuration
 
-Two markdown checklists you edit by hand. A checked box is enabled; uncheck to pause.
+Three markdown checklists. A checked box is enabled; uncheck to pause.
 
-`config/interests.md`
+`interests.md`
 ```markdown
 ## Topics
 - [x] **jazz** — Small-venue live jazz
@@ -48,11 +51,20 @@ Two markdown checklists you edit by hand. A checked box is enabled; uncheck to p
   - plugins: events
 ```
 
-`config/sources.md`
+`sources.md`
 ```markdown
 ## News
 - [x] **arxiv-cl** — rss
   - url: http://export.arxiv.org/rss/cs.CL
+```
+
+`outputs.md`
+```markdown
+- [x] **calendar** — google_calendar
+  - plugins: events
+- [x] **vault** — obsidian
+  - plugins: events, news
+  - vault_path: C:\Users\me\Obsidian\Main
 ```
 
 Full format: [`docs/SPEC.md` §3](docs/SPEC.md#3-configuration-documents).
@@ -60,9 +72,10 @@ Full format: [`docs/SPEC.md` §3](docs/SPEC.md#3-configuration-documents).
 ## Planned CLI
 
 ```
-agent run [--plugin events|news] [--dry-run]
+agent run [--plugin events|news] [--output <id>] [--dry-run]
 agent plugins
 agent sources test <id>
+agent outputs test <id>
 agent rate <item-id> up|down
 agent auth google
 agent schedule install|remove
@@ -72,7 +85,7 @@ agent schedule install|remove
 
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
 - `ANTHROPIC_API_KEY` (optional; without it a keyword ranker is used)
-- Google OAuth credentials for Calendar (and Gmail, if the digest is emailed)
+- Google OAuth credentials, if a Google output is enabled
 - API keys for keyed sources, e.g. `TICKETMASTER_API_KEY`
 
 ## Docs
