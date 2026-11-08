@@ -1,5 +1,5 @@
 """Command-line interface: ``agent run | plugins | sources test | outputs test | auth google |
-rate``."""
+rate | schedule``."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from personal_agent import __version__
-from personal_agent.kernel import runner
+from personal_agent.kernel import platform, runner
 from personal_agent.kernel.adapters.web import WebSources
 from personal_agent.kernel.config import default_config_dir, load_config
 from personal_agent.kernel.context import RunContext
@@ -213,6 +213,16 @@ def cmd_run(args: argparse.Namespace, registry: Registry) -> int:
                 file=sys.stderr,
             )
             return 3
+    failures = list(report.errors)
+    if ctx.llm is None:
+        failures.append("no working LLM provider (see warnings)")
+    elif reason := getattr(ctx.llm, "unavailable", None):
+        failures.append(f"LLM provider unavailable ({reason})")
+    if args.fail_on_error and failures:
+        print("\nFailing because of --fail-on-error:", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
+        return 4
     return 0
 
 
@@ -357,6 +367,41 @@ def cmd_rate(args: argparse.Namespace, registry: Registry) -> int:
     return 0
 
 
+def cmd_schedule(args: argparse.Namespace, registry: Registry) -> int:
+    try:
+        if args.schedule_command == "remove":
+            print(platform.remove())
+            return 0
+        at = platform.parse_time(args.time)
+        log_file = Path(args.log_file).resolve() if args.log_file else platform.default_log_file()
+        job = platform.Job(
+            argv=platform.agent_argv(Path(args.config_dir), args.db_explicit, log_file),
+            workdir=Path(args.workdir).resolve() if args.workdir else Path.cwd(),
+            at=at,
+        )
+        print(platform.install(job))
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"agent schedule {args.schedule_command} failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"  runs:    {' '.join(job.argv)}")
+    print(f"  in:      {job.workdir}  (relative output paths such as digests/ resolve here)")
+    print(f"  log:     {log_file}")
+    return 0
+
+
+LOG_MAX_BYTES = 1_000_000
+
+
+def _redirect_output(log_file: Path) -> None:
+    """Append all output to ``log_file`` (for scheduled runs, which have no console)."""
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    if log_file.is_file() and log_file.stat().st_size > LOG_MAX_BYTES:
+        log_file.replace(log_file.with_name(log_file.name + ".1"))
+    stream = open(log_file, "a", encoding="utf-8", errors="replace")  # noqa: SIM115 - process-long
+    stream.write(f"\n=== {datetime.now().astimezone():%Y-%m-%d %H:%M:%S %Z} ===\n")
+    sys.stdout = sys.stderr = stream
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -368,6 +413,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--db", default=None, help="SQLite file (default: platform data dir)")
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "--log-file", type=Path, default=None, help="append all output to this file"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     run_p = sub.add_parser("run", help="collect, rank and publish")
@@ -388,6 +436,11 @@ def build_parser() -> argparse.ArgumentParser:
             "exit with code 3 and a warning if this run's estimated LLM cost exceeds USD "
             "(checked after the run completes; does not stop calls already made)"
         ),
+    )
+    run_p.add_argument(
+        "--fail-on-error",
+        action="store_true",
+        help="exit with code 4 if a plugin, output or feedback sync failed (for scheduled runs)",
     )
     run_p.set_defaults(func=cmd_run)
 
@@ -420,17 +473,32 @@ def build_parser() -> argparse.ArgumentParser:
     rate_p.add_argument("signal", choices=["up", "down"])
     rate_p.set_defaults(func=cmd_rate)
 
+    sched_p = sub.add_parser("schedule", help="daily run with the OS scheduler (local mode)")
+    sched_sub = sched_p.add_subparsers(dest="schedule_command", required=True)
+    install_p = sched_sub.add_parser(
+        "install", help="Task Scheduler on Windows, launchd on macOS, cron elsewhere"
+    )
+    install_p.add_argument("--time", default="07:00", help="daily start, local HH:MM (07:00)")
+    install_p.add_argument(
+        "--workdir", default=None, help="folder the run starts in (default: current folder)"
+    )
+    install_p.set_defaults(func=cmd_schedule)
+    remove_p = sched_sub.add_parser("remove", help="remove the scheduled run")
+    remove_p.set_defaults(func=cmd_schedule)
     return parser
 
 
 def main(argv: Sequence[str] | None = None, registry: Registry | None = None) -> int:
     _setup_stdout()
     args = build_parser().parse_args(argv)
+    if args.log_file and args.command != "schedule":
+        _redirect_output(args.log_file)
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.ERROR,
         format="%(levelname)s %(name)s: %(message)s",
     )
     args.config_dir = args.config_dir or default_config_dir()
+    args.db_explicit = Path(args.db) if args.db else None
     args.db = args.db or default_db_path()
     result: int = args.func(args, registry or discover())
     return result

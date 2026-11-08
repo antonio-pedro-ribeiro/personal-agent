@@ -45,12 +45,15 @@ class RunReport:
     plugins: list[PluginReport] = field(default_factory=list)
     outputs: list[OutputReport] = field(default_factory=list)
     feedback_recorded: int = 0
+    feedback_errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     @property
     def errors(self) -> list[str]:
-        return [f"plugin {p.name}: {p.error}" for p in self.plugins if p.error] + [
-            f"output {o.id}: {o.error}" for o in self.outputs if o.error
+        return [
+            *(f"plugin {p.name}: {p.error}" for p in self.plugins if p.error),
+            *(f"output {o.id}: {o.error}" for o in self.outputs if o.error),
+            *self.feedback_errors,
         ]
 
 
@@ -110,7 +113,9 @@ def run(
                 )
             except Exception as exc:
                 ctx.log.exception("feedback sync failed for output %s", cfg.id)
-                ctx.warn(f"output {cfg.id}: feedback sync failed: {_error(exc)}")
+                message = f"output {cfg.id}: feedback sync failed: {_error(exc)}"
+                report.feedback_errors.append(message)
+                ctx.warn(message)
 
     # 2. Content plugins.
     kept: dict[str, list[RankedItem]] = {}

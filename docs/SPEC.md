@@ -174,6 +174,15 @@ Cloud-mode caveats: GitHub cron can start minutes to an hour late at busy times;
 repo gets 2,000 free Actions minutes/month (a run should take ~2 min). A `concurrency:` group
 prevents overlapping runs.
 
+Local mode: `agent schedule install [--time HH:MM] [--workdir DIR]` registers one daily job
+that calls the Python interpreter directly (no shell) with absolute `--config-dir` (and `--db`
+if given) and `--log-file` (default: platform log dir), starting in `--workdir` (default: the
+current folder, where relative output paths resolve). Windows: a Task Scheduler task imported
+from XML (working directory, start when available after a missed time, `pythonw.exe` so no
+console window, runs while the user is logged on); macOS: a launchd agent in
+`~/Library/LaunchAgents`; elsewhere: a tagged crontab line. Re-installing replaces the job;
+`agent schedule remove` deletes it. All per-OS scheduler code is in `kernel/platform.py`.
+
 **Obsidian and sync:** the `obsidian` output writes files.
 - *Local mode:* write straight into the vault folder; any sync method (Obsidian Sync,
   OneDrive, Syncthing, git) carries notes to Android.
@@ -437,13 +446,15 @@ two outputs and the config parser agree on syntax.
 
 ## 6. CLI
 ```
+agent [--config-dir DIR] [--db FILE] [--log-file FILE] [-v] <command>
 agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--max-cost USD]
+          [--fail-on-error]
 agent plugins                     # content + output plugins, enabled state
 agent sources test <id>
 agent outputs test <id>           # publish one sample item to that output's namespace
 agent auth google                 # one-time OAuth consent for enabled outputs' scopes
 agent rate <item-id> up|down      # feedback by id (the short id is enough, ≥ 6 hex chars)
-agent schedule install|remove     # planned (M4), not yet implemented
+agent schedule install [--time HH:MM] [--workdir DIR] | remove   # local daily run
 ```
 `--dry-run` skips publishing only; ranking/extraction LLM calls still happen and are still
 billed, so it is a safe-to-publish preview, not a free one. `--explain` prints every ranked
@@ -451,6 +462,9 @@ item's score, reason and verdict (kept / capped by `max_items` / below threshold
 item X filtered?" has a direct, CLI-native answer instead of requiring database access.
 `--max-cost` exits 3 with a warning if the run's actual cost exceeds the given USD amount; it
 is checked after the run completes and does not prevent the LLM calls that already happened.
+`--fail-on-error` exits 4 if any plugin, output or feedback sync failed, or no working LLM
+provider was available (for scheduled runs, which otherwise degrade silently).
+`--log-file` appends all output to a file (scheduled runs have no console).
 
 The CLI is the **only** integration boundary into the kernel. Every other client — the
 scheduled cloud/local run, and the IDE cockpit below — invokes it rather than importing kernel

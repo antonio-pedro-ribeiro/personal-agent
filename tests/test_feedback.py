@@ -231,7 +231,50 @@ def test_agent_rate(
     assert signal == "down" and item.short_id == short
 
 
+def test_run_fail_on_error_exit_code(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config"
+    shutil.copytree(DEMO, config)
+    (config / "outputs.md").write_text(
+        (config / "outputs.md").read_text(encoding="utf-8") + "\n- [x] **cal** — google_calendar\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    def args(db: str) -> list[str]:
+        return ["--config-dir", str(config), "--db", str(tmp_path / db), "run"]
+
+    assert main(args("a.db")) == 0  # the calendar fails (no Google), the run itself doesn't
+    assert main([*args("b.db"), "--fail-on-error"]) == 4
+    captured = capsys.readouterr()
+    assert "output cal" in captured.err and "(digest) 3 item(s) published" in captured.out
+
+
+def test_log_file_captures_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "stdout", sys.stdout)
+    monkeypatch.setattr(sys, "stderr", sys.stderr)
+    log = tmp_path / "logs" / "agent.log"
+    assert main(["--log-file", str(log), "--config-dir", str(DEMO), "plugins"]) == 0
+    sys.stdout.flush()
+    text = log.read_text(encoding="utf-8")
+    assert "===" in text and "Content plugins:" in text
+
+
 def test_delivery_without_ref_is_ignored(calendar) -> None:  # type: ignore[no-untyped-def]
     out, cfg, _, ctx = calendar
     out.publish([ranked("a", "A", start=datetime(2026, 11, 12, 20, tzinfo=LISBON))], cfg, ctx)
     assert out.sync_feedback([Delivery(item_id="x", output_id="calendar")], cfg, ctx) == []
+
+
+def test_fail_on_error_when_llm_is_missing(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scheduled run that silently fell back to keywords should still go red."""
+    monkeypatch.chdir(tmp_path)
+    args = ["--config-dir", str(DEMO), "--db", str(tmp_path / "a.db"), "run", "--dry-run"]
+    assert main(args) == 0
+    assert main([*args, "--fail-on-error"]) == 4
+    assert "no working LLM provider" in capsys.readouterr().err
