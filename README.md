@@ -1,5 +1,10 @@
 # personal-agent
 
+[![Latest release](https://img.shields.io/github/v/release/antonio-pedro-ribeiro/personal-agent?sort=semver)](https://github.com/antonio-pedro-ribeiro/personal-agent/releases/latest)
+[![CI](https://github.com/antonio-pedro-ribeiro/personal-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/antonio-pedro-ribeiro/personal-agent/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+![Windows | Linux | macOS](https://img.shields.io/badge/os-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+
 A personal assistant agent that researches **events** and **news** matching your interests
 and publishes them where you already work: Google Calendar, Google Tasks, an Obsidian vault,
 a markdown digest, or email.
@@ -10,7 +15,23 @@ a markdown digest, or email.
 > GitHub Actions or the Windows Task Scheduler. Next: news and more outputs (M5)
 > ([`docs/PLAN.md`](docs/PLAN.md)). **How to use it: [`docs/USAGE.md`](docs/USAGE.md).**
 
+## Install
+
+Latest release: **[v0.4.0 — Events MVP](https://github.com/antonio-pedro-ribeiro/personal-agent/releases/latest)**
+(events in your calendar and a daily digest, learning from your feedback). Needs Python 3.12+.
+
+```bash
+pipx install git+https://github.com/antonio-pedro-ribeiro/personal-agent@v0.4.0
+# or download the .whl from the release page:  pipx install personal_agent-0.4.0-py3-none-any.whl
+agent --version
+```
+
+Then follow the [quickstart](docs/USAGE.md#quickstart). All versions and their notes:
+[Releases](https://github.com/antonio-pedro-ribeiro/personal-agent/releases).
+
 ## Try it
+
+From a clone of the repository (for development):
 
 ```bash
 python -m pip install -e ".[dev]"      # Python 3.12+, Windows/Linux/macOS

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "personal-agent"
-version = "0.1.0"
+version = "0.4.0"
 description = "Personal agent that finds events and news for you and publishes them to your tools."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -44,6 +44,19 @@ google_calendar = "personal_agent.plugins.outputs.google_calendar:GoogleCalendar
 
 [tool.hatch.build.targets.wheel]
 packages = ["personal_agent"]
+
+[tool.hatch.build.targets.sdist]
+# Explicit list: no local caches, untracked files or the owner's own config/.
+include = [
+    "personal_agent/",
+    "tests/",
+    "examples/",
+    "docs/*.md",
+    "README.md",
+    "PRIVACY.md",
+    "AGENTS.md",
+    "pyproject.toml",
+]
 
 [tool.ruff]
 line-length = 100
