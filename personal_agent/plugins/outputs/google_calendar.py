@@ -13,7 +13,14 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from personal_agent.kernel.context import RunContext
-from personal_agent.kernel.models import Delivery, Feedback, OutputConfig, RankedItem, Signal
+from personal_agent.kernel.models import (
+    Delivery,
+    Feedback,
+    OutputConfig,
+    OwnedEntry,
+    RankedItem,
+    Signal,
+)
 
 SCOPE = "calendar.app.created"
 DEFAULT_NAME = "Suggestions"
@@ -171,6 +178,58 @@ class GoogleCalendarOutput:
                     Feedback(item_id=d.item_id, output_id=cfg.id, signal=signal, at=ctx.now)
                 )
         return feedback
+
+    def owned_entries(self, cfg: OutputConfig, ctx: RunContext) -> list[OwnedEntry]:
+        """Events the agent created in its own calendar: those carrying ``agentItemId``.
+        Events you added to the Suggestions calendar yourself are not listed."""
+        cal_id = ctx.store.get_kv(self._calendar_key(cfg))
+        if not cal_id:
+            return []
+        events = self._service(ctx).events()
+        entries: list[OwnedEntry] = []
+        page_token: str | None = None
+        while True:
+            try:
+                page = events.list(
+                    calendarId=cal_id, showDeleted=False, maxResults=250, pageToken=page_token
+                ).execute()
+            except Exception as exc:
+                if _http_status(exc) in (404, 410):
+                    return []  # the calendar itself is gone
+                raise
+            for event in page.get("items") or []:
+                private = (event.get("extendedProperties") or {}).get("private") or {}
+                if item_id := private.get(PROPERTY):
+                    start = event.get("start") or {}
+                    entries.append(
+                        OwnedEntry(
+                            item_id=str(item_id),
+                            external_ref=str(event["id"]),
+                            title=str(event.get("summary", "")),
+                            when=str(start.get("dateTime") or start.get("date") or ""),
+                        )
+                    )
+            page_token = page.get("nextPageToken")
+            if not page_token:
+                return entries
+
+    def delete_entries(
+        self, entries: Sequence[OwnedEntry], cfg: OutputConfig, ctx: RunContext
+    ) -> list[OwnedEntry]:
+        cal_id = ctx.store.get_kv(self._calendar_key(cfg))
+        if not cal_id or not entries:
+            return []
+        events = self._service(ctx).events()
+        gone: list[OwnedEntry] = []
+        for entry in entries:
+            try:
+                events.delete(calendarId=cal_id, eventId=entry.external_ref).execute()
+            except Exception as exc:
+                if _http_status(exc) not in (404, 410):
+                    ctx.warn(f"could not delete '{entry.title}': {type(exc).__name__}: {exc}")
+                    continue
+            gone.append(entry)
+        return gone
 
     def preview(self, items: Sequence[RankedItem], cfg: OutputConfig, ctx: RunContext) -> str:
         name = cfg.attrs.get("calendar_name") or DEFAULT_NAME

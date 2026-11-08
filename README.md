@@ -161,6 +161,7 @@ agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--fail
 agent plugins
 agent sources test <id>
 agent outputs test <id>
+agent outputs clear <id> [--dry-run] [--yes]
 agent rate <item-id> up|down
 agent auth google [--print-token]
 agent schedule install [--time HH:MM] | remove

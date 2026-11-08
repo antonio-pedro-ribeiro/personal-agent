@@ -18,7 +18,7 @@ from personal_agent.kernel.adapters.web import WebSources
 from personal_agent.kernel.config import default_config_dir, load_config
 from personal_agent.kernel.context import RunContext
 from personal_agent.kernel.models import Config, Feedback, RankedItem, make_item_id
-from personal_agent.kernel.plugin import Registry, discover
+from personal_agent.kernel.plugin import ClearableOutput, Registry, discover
 from personal_agent.kernel.services import google, llm
 from personal_agent.kernel.services.availability import (
     Availability,
@@ -316,6 +316,59 @@ def cmd_outputs_test(args: argparse.Namespace, registry: Registry) -> int:
     return 0
 
 
+def cmd_outputs_clear(args: argparse.Namespace, registry: Registry) -> int:
+    """Delete everything the agent created in one output's namespace (e.g. its calendar)."""
+    config = load_config(args.config_dir)
+    cfg = next((o for o in config.outputs if o.id == args.output_id), None)
+    if cfg is None:
+        print(f"Unknown output '{args.output_id}'", file=sys.stderr)
+        return 2
+    output = registry.outputs.get(cfg.type)
+    if output is None:
+        print(f"Output type '{cfg.type}' is not installed", file=sys.stderr)
+        return 2
+    if not isinstance(output, ClearableOutput):
+        print(f"Output '{cfg.id}' ({cfg.type}) does not support clearing", file=sys.stderr)
+        return 2
+    ctx = build_context(
+        config, args.config_dir, args.db, dry_run=args.dry_run, registry=registry, use_llm=False
+    )
+    try:
+        entries = output.owned_entries(cfg, ctx)
+        if not entries:
+            print(f"Nothing created by the agent in '{cfg.id}'.")
+            return 0
+        print(f"{len(entries)} item(s) created by the agent in '{cfg.id}':")
+        for e in entries:
+            print(f"  {e.when[:16]:<16}  {e.title}")
+        if args.dry_run:
+            print("Dry run: nothing deleted.")
+            return 0
+        if not args.yes:
+            if not sys.stdin.isatty():
+                print("Not deleted: add --yes (no terminal to confirm).", file=sys.stderr)
+                return 2
+            answer = input(f"Delete these {len(entries)} item(s)? [y/N] ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("Nothing deleted.")
+                return 1
+        gone = output.delete_entries(entries, cfg, ctx)
+        # Reset: forget the deliveries, so the deletions are not read back as "rejected"
+        # feedback, and suggestions that are still upcoming and relevant can come back.
+        ctx.store.forget_deliveries(cfg.id, [e.item_id for e in gone])
+    except Exception as exc:
+        print(f"Clearing '{cfg.id}' failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        ctx.store.close()
+    print(
+        f"Deleted {len(gone)} of {len(entries)}. The next run may add back suggestions that "
+        "are still upcoming and relevant."
+    )
+    _print_warnings(ctx.warnings)
+    return 0 if len(gone) == len(entries) else 4
+
+
 def cmd_auth_google(args: argparse.Namespace, registry: Registry) -> int:
     config = load_config(args.config_dir)
     secrets = args.client_secrets or os.environ.get(google.CLIENT_SECRETS_ENV)
@@ -472,6 +525,14 @@ def build_parser() -> argparse.ArgumentParser:
     otest_p = outputs_sub.add_parser("test", help="publish one sample item to an output")
     otest_p.add_argument("output_id")
     otest_p.set_defaults(func=cmd_outputs_test)
+    oclear_p = outputs_sub.add_parser(
+        "clear",
+        help="delete everything the agent created in an output (e.g. all Suggestions events)",
+    )
+    oclear_p.add_argument("output_id")
+    oclear_p.add_argument("--dry-run", action="store_true", help="list only; delete nothing")
+    oclear_p.add_argument("-y", "--yes", action="store_true", help="don't ask to confirm")
+    oclear_p.set_defaults(func=cmd_outputs_clear)
 
     auth_p = sub.add_parser("auth", help="connect accounts")
     auth_sub = auth_p.add_subparsers(dest="auth_command", required=True)

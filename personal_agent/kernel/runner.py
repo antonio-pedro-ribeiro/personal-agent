@@ -82,6 +82,28 @@ def _dedupe(items: Sequence[Item]) -> list[Item]:
     return list(seen.values())
 
 
+def _keep(
+    ranked: Sequence[RankedItem],
+    threshold: float,
+    max_items: int,
+    delivered: dict[str, set[str]],
+) -> list[RankedItem]:
+    """Items at or above ``threshold``, in rank order. ``max_items`` caps only items not yet
+    delivered anywhere: one already delivered to another output was counted when it went out
+    (e.g. against ``max_events_per_week``), so sending it to a new or cleared output is free."""
+    kept: list[RankedItem] = []
+    fresh = max_items
+    for r in ranked:
+        if r.score < threshold:
+            continue
+        if delivered.get(r.id):
+            kept.append(r)
+        elif fresh > 0:
+            kept.append(r)
+            fresh -= 1
+    return kept
+
+
 def _error(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
 
@@ -182,7 +204,7 @@ def run(
                 store.record_rankings(ranked, now)
             pr.threshold = hints.threshold
             pr.ranked = ranked
-            kept[name] = [r for r in ranked if r.score >= hints.threshold][: hints.max_items]
+            kept[name] = _keep(ranked, hints.threshold, hints.max_items, delivered)
             pr.kept = len(kept[name])
             pr.kept_ids = {r.id for r in kept[name]}
             progress.line(f"→ {pr.kept} kept (threshold {hints.threshold:.0f})")

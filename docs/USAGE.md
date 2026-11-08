@@ -227,6 +227,10 @@ busy on your main calendar, not what the events are. One-time setup:
    A test event appears tomorrow at 20:00 in the new *Suggestions* calendar, on every device
    where you use Google Calendar. Delete it whenever you like.
 
+   To remove every suggestion the agent has added (events you put in that calendar
+   yourself are kept): `agent outputs clear calendar`. Deleting them this way doesn't count
+   as rejecting them, and the next run may add back the ones still upcoming and relevant.
+
 Free/busy is used automatically once connected: suggestions that overlap your busy time are
 dropped. If you later enable another Google output, run `agent auth google` again; the
 agent warns you when a permission is missing.
@@ -372,6 +376,7 @@ all output to that file instead of the terminal.
 | `agent plugins` | installed content and output plugins, and whether each is enabled |
 | `agent sources test <id>` | fetch one source and list what it returns, before filters |
 | `agent outputs test <id>` | publish one sample item to that output |
+| `agent outputs clear <id>` | delete everything the agent created there (e.g. all events in *Suggestions*; yours stay); asks first, `--yes` to skip, `--dry-run` to only list |
 | `agent auth google [--client-secrets FILE] [--print-token]` | connect Google; `--print-token` prints the token for cloud mode (keep it private) |
 | `agent rate <id> up\|down` | give feedback on an item by its id |
 | `agent schedule install [--time HH:MM] [--workdir DIR]` | daily run with the OS scheduler ([details](#running-every-day)) |

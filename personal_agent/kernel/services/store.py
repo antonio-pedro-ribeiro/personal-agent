@@ -127,6 +127,16 @@ class Store:
                 [(d.item_id, d.output_id, d.external_ref, _iso(now)) for d in deliveries],
             )
 
+    def forget_deliveries(self, output_id: str, item_ids: Iterable[str]) -> int:
+        """Drop delivery records so the items can be delivered to ``output_id`` again and are
+        no longer checked for feedback there (used after ``agent outputs clear``)."""
+        with self.conn:
+            cur = self.conn.executemany(
+                "DELETE FROM deliveries WHERE output_id = ? AND item_id = ?",
+                [(output_id, i) for i in item_ids],
+            )
+        return cur.rowcount
+
     def count_delivered_since(self, plugin: str, since: datetime) -> int:
         """Distinct items of ``plugin`` delivered to any output since ``since``."""
         row = self.conn.execute(

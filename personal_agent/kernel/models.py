@@ -64,6 +64,15 @@ class Delivery(BaseModel):
     external_ref: str | None = None
 
 
+class OwnedEntry(BaseModel):
+    """Something an output created in its own namespace (a calendar event, a task...)."""
+
+    item_id: str
+    external_ref: str
+    title: str = ""
+    when: str = ""  # display only, as the output stores it
+
+
 class Feedback(BaseModel):
     item_id: str
     output_id: str

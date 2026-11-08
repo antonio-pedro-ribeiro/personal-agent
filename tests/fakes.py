@@ -90,6 +90,8 @@ class FakeCalendarService:
         self.calendars_db: dict[str, dict[str, Any]] = {}
         self.events_db: dict[str, list[dict[str, Any]]] = {}
         self.touched_calendars: list[str] = []
+        self.page_size = 250
+        self.fail_delete: set[str] = set()
         self._ids = itertools.count(1)
 
     def calendars(self) -> FakeCalendarService:
@@ -121,17 +123,45 @@ class _Events:
     def __init__(self, svc: FakeCalendarService) -> None:
         self.svc = svc
 
-    def list(self, calendarId: str, privateExtendedProperty: str, **_: Any) -> _Call:
-        key, _, value = privateExtendedProperty.partition("=")
+    def list(
+        self,
+        calendarId: str,
+        privateExtendedProperty: str | None = None,
+        pageToken: str | None = None,
+        **_: Any,
+    ) -> _Call:
+        key, _, value = (privateExtendedProperty or "").partition("=")
 
         def run() -> dict[str, Any]:
             self.svc.touched_calendars.append(calendarId)
+            if calendarId not in self.svc.events_db:
+                raise HttpError(404)
             items = [
                 e
-                for e in self.svc.events_db.get(calendarId, [])
-                if e["extendedProperties"]["private"].get(key) == value
+                for e in self.svc.events_db[calendarId]
+                if not key
+                or ((e.get("extendedProperties") or {}).get("private") or {}).get(key) == value
             ]
-            return {"items": items}
+            size = self.svc.page_size
+            start = int(pageToken or 0)
+            page: dict[str, Any] = {"items": items[start : start + size]}
+            if start + size < len(items):
+                page["nextPageToken"] = str(start + size)
+            return page
+
+        return _Call(run)
+
+    def delete(self, calendarId: str, eventId: str) -> _Call:
+        def run() -> None:
+            self.svc.touched_calendars.append(calendarId)
+            events = self.svc.events_db.get(calendarId, [])
+            for event in events:
+                if event["id"] == eventId:
+                    if eventId in self.svc.fail_delete:
+                        raise HttpError(500)
+                    events.remove(event)
+                    return
+            raise HttpError(404)
 
         return _Call(run)
 

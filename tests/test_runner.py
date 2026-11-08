@@ -9,6 +9,7 @@ from personal_agent.kernel.models import (
     Feedback,
     Interests,
     OutputConfig,
+    RankHints,
     Source,
     Topic,
 )
@@ -189,3 +190,26 @@ def test_only_filters(make_ctx: Callable[..., RunContext]) -> None:
     cfg = config(OutputConfig(id="a", type="a"), OutputConfig(id="b", type="b"))
     run(cfg, registry([FakeContent(ITEMS)], [a, b]), make_ctx(), only_output="b")
     assert a.published == [] and len(b.published) == 2
+
+
+class CappedContent(FakeContent):
+    """Weekly cap already used up: no room for anything new."""
+
+    def rank_hints(self, interests: Interests, ctx: RunContext) -> RankHints:
+        return RankHints(threshold=50, max_items=0)
+
+
+def test_cap_counts_only_items_not_delivered_anywhere(
+    make_ctx: Callable[..., RunContext],
+) -> None:
+    """An item already delivered elsewhere was counted then; a new or cleared output gets it."""
+    a, b = FakeOutput("a"), FakeOutput("b")
+    run(config(OutputConfig(id="a", type="a")), registry([FakeContent(ITEMS)], [a, b]), make_ctx())
+    report = run(
+        config(OutputConfig(id="a", type="a"), OutputConfig(id="b", type="b")),
+        registry([CappedContent(ITEMS)], [a, b]),
+        make_ctx(),
+    )
+    assert {i.title for i in b.published} == {"jazz night", "ai talk"}
+    assert len(a.published) == 2  # nothing new for a
+    assert report.plugins[0].kept == 2

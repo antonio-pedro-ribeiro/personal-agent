@@ -14,6 +14,7 @@ from personal_agent.kernel.models import (
     Interests,
     Item,
     OutputConfig,
+    OwnedEntry,
     RankedItem,
     RankHints,
     Source,
@@ -66,6 +67,21 @@ class OutputPlugin(Protocol):
     ) -> list[Feedback]: ...
 
     def preview(self, items: Sequence[RankedItem], cfg: OutputConfig, ctx: RunContext) -> str: ...
+
+
+@runtime_checkable
+class ClearableOutput(Protocol):
+    """Optional output capability behind ``agent outputs clear``: list and delete what the
+    output itself created. Never touches user-created content, even in the output's namespace.
+    """
+
+    def owned_entries(self, cfg: OutputConfig, ctx: RunContext) -> list[OwnedEntry]: ...
+
+    def delete_entries(
+        self, entries: Sequence[OwnedEntry], cfg: OutputConfig, ctx: RunContext
+    ) -> list[OwnedEntry]:
+        """Delete ``entries``; return those now gone (already-missing ones count as gone)."""
+        ...
 
 
 @dataclass

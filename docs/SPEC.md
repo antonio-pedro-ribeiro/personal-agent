@@ -441,7 +441,9 @@ without a git vault), is reported as a warning and skipped.
       the plugin, dislikes, `rank_hints`, last 20 feedback examples. Output is JSON validated
       against a schema: `[{id, score 0–100, reason, duplicate_of?}]`. Without a working LLM
       provider, a keyword-overlap ranker is used.
-   5. Keep top `max_items` with score ≥ `threshold`.
+   5. Keep items with score ≥ `threshold`; `max_items` caps only items not yet delivered to
+      any output (one already delivered elsewhere was counted then, so a new or cleared
+      output still gets it).
 4. **Route:** for each enabled output, select ranked items whose plugin is in `plugins`, with
    score ≥ `min_score`, that the output `accepts()`, and that have no delivery to that output yet.
 5. **Publish:** `publish()` per output (or `preview()` with `--dry-run`); record deliveries.
@@ -463,6 +465,7 @@ agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--max-
 agent plugins                     # content + output plugins, enabled state
 agent sources test <id>
 agent outputs test <id>           # publish one sample item to that output's namespace
+agent outputs clear <id> [--dry-run] [--yes]   # delete what the agent created there
 agent auth google                 # one-time OAuth consent for enabled outputs' scopes
 agent rate <item-id> up|down      # feedback by id (the short id is enough, ≥ 6 hex chars)
 agent schedule install [--time HH:MM] [--workdir DIR] | remove   # local daily run
@@ -476,6 +479,15 @@ is checked after the run completes and does not prevent the LLM calls that alrea
 `--fail-on-error` exits 4 if any plugin, output or feedback sync failed, or no working LLM
 provider was available (for scheduled runs, which otherwise degrade silently).
 `--log-file` appends all output to a file (scheduled runs have no console).
+
+`agent outputs clear <id>` deletes everything the agent created in that output's namespace
+(for `google_calendar`: every event carrying `agentItemId` in the *Suggestions* calendar)
+and never anything the user added there; the calendar itself is kept. It lists the items
+and asks to confirm (`--yes` skips the prompt, required without a terminal; `--dry-run`
+only lists). It then forgets those deliveries, so the deletions are not read back as
+`rejected` feedback and the next run can add back suggestions that are still upcoming and
+relevant. Outputs opt in through the optional `ClearableOutput` protocol
+(`owned_entries`, `delete_entries`); others report that they do not support clearing.
 
 While it works, `agent run` prints a **step log** to stderr: a header (mode, time, LLM
 provider and model), then numbered steps (`[2/4] Collecting events (8 sources)`) with one line
