@@ -4,6 +4,8 @@
 #   state/agent.db      SQLite store (deliveries, feedback, caches)
 #   state/digests/      markdown digests; tick 👍/👎 on github.com (branch `state`) to rate
 # Config is read from config/ on the default branch, so edit it there (also from a phone).
+# config/ is git-ignored (it reveals your interests): commit it in your private copy with
+# `git add -f config/`.
 #
 # Secrets (Settings → Secrets and variables → Actions):
 #   PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN  for the default claude_code provider (`claude setup-token`)

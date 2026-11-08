@@ -172,7 +172,8 @@ Gmail, a browser). No device has to stay on, and there is no native app in v1.
 
 Cloud mode: the workflow is off unless the repo variable `PERSONAL_AGENT_CLOUD_MODE` is `true`,
 because in a public repo the state branch, digests and run logs would be public. It checks out the `state` branch into `state/` and runs there with
-`PERSONAL_AGENT_DATA_DIR=state` and config from `config/` on the default branch, so
+`PERSONAL_AGENT_DATA_DIR=state` and config from `config/` on the default branch (git-ignored; a private copy commits it
+with `git add -f`), so
 `agent.db` and relative output paths (`digests/`) are committed back to `state` after every
 non-dry run, even one with errors (what was delivered must be remembered). It runs
 `agent run --explain --fail-on-error`, uploads the output as a run-log artifact, and fails the

@@ -47,7 +47,8 @@ mixers" night, a Monday-morning workshop (outside your time windows), a Porto ev
 far) and a €150 gala (over budget) are dropped. Without `--dry-run`, the digest is written to
 `out/digests/YYYY-MM-DD.md`, and a second run adds nothing new.
 
-Your own setup lives in `config/` (`PERSONAL_AGENT_CONFIG_DIR` to move it). State is kept in the
+Your own setup lives in `config/` (`PERSONAL_AGENT_CONFIG_DIR` to move it), which is git-ignored so your
+interests are never committed; start from `examples/demo/`. State is kept in the
 platform data dir (`PERSONAL_AGENT_DATA_DIR`, or `--db`).
 
 ## Getting started
@@ -72,7 +73,8 @@ a **private** copy (fork or clone, then make it private).
 4. *Actions → Agent → Run workflow* once to check it. After that it runs daily at 06:00 UTC.
 
 Results: the *Suggestions* calendar in Google Calendar, and digests in `digests/` on the
-`state` branch (tick 👍/👎 there on github.com). Config stays in `config/` on the main branch.
+`state` branch (tick 👍/👎 there on github.com). Config is read from `config/` on the main branch: it is git-ignored, so commit it in your private copy with
+`git add -f config/`.
 
 **Windows local mode** (Task Scheduler; if the PC is off at the set time, the run starts when
 it's back on)

@@ -21,6 +21,10 @@ out/
 # Generated output / local run artifacts (not fixtures) — see docs/SPEC.md §1
 digests/
 
+# Your own config (interests, sources, outputs) stays private; start from examples/demo/.
+# In a PRIVATE copy using cloud mode, commit it anyway with `git add -f config/`.
+/config/
+
 # Claude Code personal settings
 .claude/
 .import_linter_cache/

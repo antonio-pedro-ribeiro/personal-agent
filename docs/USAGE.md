@@ -38,8 +38,9 @@ install it, run `claude` once and `/login` with your Pro/Max account. Nothing el
 Prefer pay-per-use with a Claude or Gemini API key? See
 [Choosing an LLM provider](#choosing-an-llm-provider).
 
-**4. Describe what you like** in [`config/interests.md`](../config/interests.md) (city,
-budget, topics) and check which sources are on in [`config/sources.md`](../config/sources.md).
+**4. Describe what you like.** Copy the three files from [`examples/demo/`](../examples/demo/) into
+`config/` (git-ignored, so your interests are never committed), then set your city, budget and
+topics in `config/interests.md` and check which sources are on in `config/sources.md`.
 
 **5. Preview a real run:**
 
@@ -323,7 +324,8 @@ run). Setup is in the [README](../README.md#getting-started). Each run:
 
 - installs the agent (and Claude Code for the default provider);
 - checks out the `state` branch into `state/` and runs there, so `state/agent.db` and
-  `state/digests/` are saved back to that branch (config is read from `config/` on main);
+  `state/digests/` are saved back to that branch (config is read from `config/` on main, which
+  is git-ignored: commit it in your private copy with `git add -f config/`);
 - runs `agent run --explain --fail-on-error` and uploads the output as the `run-log-<n>`
   artifact (items, scores, reasons, cost);
 - fails (red, and GitHub emails you) if a plugin, output or feedback sync failed, or the LLM
