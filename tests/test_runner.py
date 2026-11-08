@@ -175,10 +175,12 @@ def test_feedback_sync_records_signals(make_ctx: Callable[..., RunContext]) -> N
 def test_warnings_for_missing_plugins_and_outputs(make_ctx: Callable[..., RunContext]) -> None:
     cfg = config(OutputConfig(id="x", type="not_installed", origin="outputs.md:3"))
     cfg.sources.append(Source(id="n", plugin="news", type="rss"))
+    cfg.sources.append(Source(id="p", plugin="podcasts", type="rss", enabled=False))
     report = run(cfg, registry([FakeContent(ITEMS)], []), make_ctx())
     joined = "\n".join(report.warnings)
     assert "output type 'not_installed' is not installed" in joined
     assert "no installed content plugin for section 'news'" in joined
+    assert "podcasts" not in joined  # unchecked sources don't warn
     assert "no enabled output routes plugin 'fake'" in joined
 
 

@@ -335,25 +335,20 @@ Defaults: `weight: 0.5`, `plugins:` all installed content plugins.
 
 ## Events
 - [x] **web** — web_search
-  - search: true
-  - max_queries: 5
-- [x] **safejourney** — web_page
-  - url: https://safejourney.pt
-- [x] **alltera-tribe** — web_page
-  - url: TBD   ← confirm the official site or event page
-- [ ] **zdb-jazz** — ical
-  - url: https://example.com/calendar.ics
+  - max_queries: 3
+- [x] **some-venue** — web_page
+  - url: https://venue.example/agenda/
+- [ ] **club-calendar** — ical
+  - url: https://club.example/calendar.ics
 
 ## News
-- [x] **hn** — hackernews
-- [x] **arxiv-cl** — rss
-  - url: http://export.arxiv.org/rss/cs.CL
-- [ ] **gdelt** — gdelt
-  - search: true
+- [x] **some-feed** — rss
+  - url: https://news.example/feed/
 ```
-The text after `—` is the adapter `type`. `search: true` means the adapter receives the
+The spec names no particular sources: the actual list is user data in `config/sources.md`
+(the example above only shows the format). The text after `—` is the adapter `type`. `search: true` means the adapter receives the
 keywords of enabled topics that list this plugin; otherwise it fetches its whole feed.
-A section with no installed content plugin is reported as a warning. A source with a missing
+A section with checked sources but no installed content plugin is reported as a warning. A source with a missing
 or invalid `url` is skipped with a warning. A `url` without a scheme is a local file path,
 relative to the config directory (useful for exported `.ics` files and fixtures).
 
@@ -480,9 +475,9 @@ google-auth-oauthlib (Calendar, Tasks, Gmail) · feedparser · icalendar · http
 SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 
 ## 9. Acceptance criteria (v1 done)
-1. `agent run --dry-run` with the `web`, `safejourney` and `alltera-tribe` event sources,
-   2 news sources and the `markdown_digest` + `google_calendar` outputs previews both outputs; events appear in both, news only in the
-   digest.
+1. `agent run --dry-run` with event sources of each type (`ical`, `web_page`, `web_search`),
+   2 news sources and the `markdown_digest` + `google_calendar` outputs previews both outputs;
+   events appear in both, news only in the digest.
 2. Unchecking a topic, source or output removes its effect on the next run; no other edit needed.
 3. The kernel has no imports from `plugins/`; removing any one plugin package (e.g. `news` or
    `obsidian`) leaves the rest working.
@@ -516,10 +511,8 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 ## 10. Open questions
 - Which outputs to enable by default: digest only, or digest + calendar?
 - Home city and initial interests.
-- AllTera Tribe: official URL? Not found by web search; the source stays disabled until known.
-  (safejourney.pt was verified in M2: a WordPress magazine with an *eventos* RSS feed, mostly
-  reports on past events; only `www.` has a valid TLS certificate.) Social media pages are not
-  fetchable without login and are out of scope.
+- Sources that publish only on social media (Instagram, Facebook) are not fetchable without
+  login and are out of scope; is a manual import (e.g. an exported `.ics`) enough for those?
 - Cost of `web_search`: keep Opus 5.5 with a small `max_queries`, run web search weekly only,
   use a cheaper model (`PERSONAL_AGENT_MODEL`) for extraction, or use a subscription provider
   (`claude_code` or `gemini_cli`, M3) or `gemini_api`?

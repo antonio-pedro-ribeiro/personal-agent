@@ -82,7 +82,8 @@ def run(
     store, now = ctx.store, ctx.now
     ctx.plugin_titles = {name: p.title for name, p in registry.content.items()}
 
-    for missing in sorted({s.plugin for s in config.sources} - registry.content.keys()):
+    enabled_sections = {s.plugin for s in config.sources if s.enabled}
+    for missing in sorted(enabled_sections - registry.content.keys()):
         ctx.warn(f"sources.md: no installed content plugin for section '{missing}'")
 
     active: list[tuple[OutputConfig, OutputPlugin]] = []
