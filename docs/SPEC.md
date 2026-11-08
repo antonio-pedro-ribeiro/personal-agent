@@ -165,14 +165,23 @@ Gmail, a browser). No device has to stay on, and there is no native app in v1.
 **Deployment modes**
 | Mode | Runs on | Scheduler | State | Status |
 |---|---|---|---|---|
-| **Cloud** (default) | GitHub Actions in this (private) repo | workflow `schedule:` + manual "Run workflow" | `agent.db` committed to an orphan `state` branch | v1 |
+| **Cloud** (default) | GitHub Actions in this (private) repo (`.github/workflows/agent.yml`) | workflow `schedule:` (daily 06:00 UTC) + manual "Run workflow" | `agent.db` and `digests/` committed to an orphan `state` branch | v1 |
 | **Windows local** | Python via `pipx` | Task Scheduler, via `agent schedule install` | `%LOCALAPPDATA%\personal-agent\` | v1 |
 | Linux/macOS local | Python via `pipx` | cron / launchd, via `agent schedule install` | platform data dir | v1 (dev) |
 | Android local (Termux) | — | — | — | **Unsupported.** Doze and app standby defer or kill background jobs, so scheduled runs are unreliable. |
 
-Cloud-mode caveats: GitHub cron can start minutes to an hour late at busy times; a private
-repo gets 2,000 free Actions minutes/month (a run should take ~2 min). A `concurrency:` group
-prevents overlapping runs.
+Cloud mode: the workflow checks out the `state` branch into `state/` and runs there with
+`PERSONAL_AGENT_DATA_DIR=state` and config from `config/` on the default branch, so
+`agent.db` and relative output paths (`digests/`) are committed back to `state` after every
+non-dry run, even one with errors (what was delivered must be remembered). It runs
+`agent run --explain --fail-on-error`, uploads the output as a run-log artifact, and fails the
+job if the run had errors or no working LLM. Credentials come from repo secrets
+(`PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` for the default provider, the workflow installing Claude
+Code; or an API key; and `PERSONAL_AGENT_GOOGLE_TOKEN_JSON`); `PERSONAL_AGENT_LLM_PROVIDER`,
+`PERSONAL_AGENT_MODEL` and `PERSONAL_AGENT_EFFORT` from repo variables.
+Caveats: GitHub cron can start minutes to an hour late at busy times; a private repo gets 2,000
+free Actions minutes/month (a run should take ~2 min). A `concurrency:` group prevents
+overlapping runs.
 
 Local mode: `agent schedule install [--time HH:MM] [--workdir DIR]` registers one daily job
 that calls the Python interpreter directly (no shell) with absolute `--config-dir` (and `--db`
@@ -510,7 +519,7 @@ personal_agent/
       google_calendar.py  google_tasks.py  obsidian.py  markdown_digest.py  email.py
   cli.py
 config/interests.md, config/sources.md, config/outputs.md
-digests/                    # markdown_digest output (generated; gitignored, not committed)
+digests/                    # markdown_digest output (generated; gitignored on main; on the state branch in cloud mode)
 .github/workflows/agent.yml # cloud mode: scheduled run, state branch
 .github/workflows/ci.yml    # tests on ubuntu + windows
 .github/agents/personal-agent.agent.md  # IDE cockpit (§6); calls the CLI, not the kernel

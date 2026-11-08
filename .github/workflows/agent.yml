@@ -1,0 +1,117 @@
+# Cloud mode (docs/SPEC.md §1): the agent runs here every day, no device needs to be on.
+#
+# State lives on the orphan `state` branch, checked out into ./state:
+#   state/agent.db      SQLite store (deliveries, feedback, caches)
+#   state/digests/      markdown digests; tick 👍/👎 on github.com (branch `state`) to rate
+# Config is read from config/ on the default branch, so edit it there (also from a phone).
+#
+# Secrets (Settings → Secrets and variables → Actions):
+#   PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN  for the default claude_code provider (`claude setup-token`)
+#   PERSONAL_AGENT_ANTHROPIC_API_KEY        only if the provider is anthropic_api
+#   PERSONAL_AGENT_GEMINI_API_KEY           only if the provider is gemini_api
+#   PERSONAL_AGENT_GOOGLE_TOKEN_JSON        from `agent auth google --print-token`
+# Variables (optional): PERSONAL_AGENT_LLM_PROVIDER, PERSONAL_AGENT_MODEL, PERSONAL_AGENT_EFFORT
+
+name: Agent
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily (07:00 in Lisbon in summer); GitHub may start it late
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only (publish nothing, record no feedback)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write # push agent.db and digests to the state branch
+
+concurrency:
+  group: personal-agent-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PERSONAL_AGENT_LLM_PROVIDER: ${{ vars.PERSONAL_AGENT_LLM_PROVIDER || 'claude_code' }}
+      PERSONAL_AGENT_MODEL: ${{ vars.PERSONAL_AGENT_MODEL }}
+      PERSONAL_AGENT_EFFORT: ${{ vars.PERSONAL_AGENT_EFFORT }}
+      PERSONAL_AGENT_CONFIG_DIR: ${{ github.workspace }}/config
+      PERSONAL_AGENT_DATA_DIR: ${{ github.workspace }}/state
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the state branch (created on the first run)
+        run: |
+          git config --global user.name "personal-agent"
+          git config --global user.email "personal-agent@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin state > /dev/null; then
+            git fetch --depth=1 origin state:state
+            git worktree add state state
+          else
+            git worktree add --orphan -b state state
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the agent
+        run: python -m pip install .
+
+      - uses: actions/setup-node@v4
+        if: env.PERSONAL_AGENT_LLM_PROVIDER == 'claude_code'
+        with:
+          node-version: "22"
+
+      - name: Install Claude Code
+        if: env.PERSONAL_AGENT_LLM_PROVIDER == 'claude_code'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the agent
+        id: agent
+        working-directory: state # relative output paths (digests/) land on the state branch
+        env:
+          PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN }}
+          PERSONAL_AGENT_ANTHROPIC_API_KEY: ${{ secrets.PERSONAL_AGENT_ANTHROPIC_API_KEY }}
+          PERSONAL_AGENT_GEMINI_API_KEY: ${{ secrets.PERSONAL_AGENT_GEMINI_API_KEY }}
+          PERSONAL_AGENT_GOOGLE_TOKEN_JSON: ${{ secrets.PERSONAL_AGENT_GOOGLE_TOKEN_JSON }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          set +e
+          # shellcheck disable=SC2086  # DRY_RUN is empty or one flag
+          agent run --explain --fail-on-error $DRY_RUN 2>&1 | tee "$RUNNER_TEMP/run-log.txt"
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Save state (agent.db, digests)
+        # Also after a run with errors: deliveries that did happen must be remembered.
+        if: always() && steps.agent.outcome == 'success' && !inputs.dry_run
+        working-directory: state
+        run: |
+          # --force: the main branch's .gitignore excludes *.db and digests/; this branch keeps them
+          git add --all --force .
+          if git diff --cached --quiet; then
+            echo "No state changes"
+          else
+            git commit -q -m "Run ${{ github.run_number }} ($(date -u +%Y-%m-%d))"
+            git push origin state
+          fi
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/run-log.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Fail if the run had errors
+        if: steps.agent.outputs.exit_code != '0'
+        run: |
+          echo "::error::agent run exited with ${{ steps.agent.outputs.exit_code }}; see the run log"
+          exit 1
