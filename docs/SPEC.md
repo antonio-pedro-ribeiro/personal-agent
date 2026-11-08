@@ -77,6 +77,24 @@ sources are skipped with a warning (feed-discovered sources still work).
 Site-specific scraping code is avoided: if a generic `web_page` source proves unreliable, the
 fix is a dedicated adapter in the plugin, written later.
 
+### LLM providers (kernel)
+The `Ranker` and `Extractor` call the LLM through one kernel interface (`LLM.parse`: system
+prompt, untrusted content, pydantic schema, optional web search budget → validated object plus
+the URLs the search/fetch tools returned). `PERSONAL_AGENT_LLM_PROVIDER` selects the
+implementation; plugins never know which one runs.
+
+| Provider | How | Credentials | Billing | Status |
+|---|---|---|---|---|
+| `anthropic_api` (default) | Anthropic SDK: structured outputs, adaptive thinking, effort from `PERSONAL_AGENT_EFFORT`, server-side refusal fallbacks, server web search + web fetch tools | `PERSONAL_AGENT_ANTHROPIC_API_KEY` | pay per use; exact cost per run | M2 |
+| `claude_code` | Claude Code CLI in non-interactive mode (`claude -p`) as a subprocess; JSON validated against the schema (one retry); only the built-in web search and web fetch tools allowed | local Claude Code login with a Claude Pro/Max subscription, or `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) in cloud mode | included in the plan, within its usage limits | M3 |
+
+Rules for both: the same prompts, untrusted-content delimiting and link/date validation; the
+model from `PERSONAL_AGENT_MODEL` when set. With `claude_code`, the API key is ignored and never
+passed to the subprocess, so a run never falls back to paid API use. If the provider is
+unavailable (no key, CLI missing or logged out, usage limit reached), the run continues with
+keyword ranking and skips web sources, with a warning. Using a subscription this way is for
+the user's own personal agent only.
+
 ### Output plugin API
 ```python
 class OutputPlugin(Protocol):
@@ -416,7 +434,8 @@ personal_agent/
     models.py      # Item, RankedItem, RankHints, Delivery, Feedback
     plugin.py      # ContentPlugin / OutputPlugin protocols, registry, entry points
     runner.py      # run loop + router
-    services/      # store, ranker, extractor, availability, google_auth, secrets, checklist
+    services/      # store, ranker, extractor, llm (API provider), llm_claude_code,
+                   # availability, google, http, checklist
     adapters/      # generic: web_search.py, web_page.py (feed discovery + extraction)
     platform.py    # data dirs, scheduler install (schtasks / cron / launchd)
   plugins/
@@ -433,7 +452,8 @@ digests/                    # markdown_digest output
 ```
 
 ## 8. Stack
-Python 3.12+ · Anthropic SDK (model configurable via env) · google-api-python-client +
+Python 3.12+ · Anthropic SDK (model configurable via env) · optional Claude Code CLI (subscription
+provider) · google-api-python-client +
 google-auth-oauthlib (Calendar, Tasks, Gmail) · feedparser · icalendar · httpx · pydantic ·
 SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 
@@ -463,6 +483,9 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
     LLM call, and a page that links an iCal feed is parsed without the LLM.
 14. Text such as "ignore previous instructions" inside a fetched page or search result has no
     effect on extraction or ranking (fixture test).
+15. With `PERSONAL_AGENT_LLM_PROVIDER=claude_code` and no API key, a run ranks and extracts
+    events using the Claude subscription; the API key never reaches the subprocess; a
+    logged-out CLI or reached usage limit degrades to keyword ranking with a warning.
 
 ## 10. Open questions
 - Which outputs to enable by default: digest only, or digest + calendar?
@@ -472,7 +495,11 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
   reports on past events; only `www.` has a valid TLS certificate.) Social media pages are not
   fetchable without login and are out of scope.
 - Cost of `web_search`: keep Opus 5.5 with a small `max_queries`, run web search weekly only,
-  or use a cheaper model (`PERSONAL_AGENT_MODEL`) for extraction?
+  use a cheaper model (`PERSONAL_AGENT_MODEL`) for extraction, or use the `claude_code`
+  provider (M3) so it's covered by the subscription?
+- `claude_code` provider: which Claude Code CLI flags does the installed version support for
+  JSON output, tool allowlists and model selection, and how are usage limits reported? (M3
+  spike.)
 - Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
   cloud mode; otherwise use Windows local mode.)
 - Obsidian: is the vault git-synced (cloud mode works) or Obsidian Sync-only (local mode)?

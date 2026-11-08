@@ -3,9 +3,10 @@
 How to install, configure and run personal-agent. For the design, see [`SPEC.md`](SPEC.md);
 for what is built and what is next, see [`PLAN.md`](PLAN.md).
 
-> **What works today (M1 + M2):** events from iCal, web pages and web search; LLM ranking;
-> a markdown digest; suggestions in Google Calendar. **Not yet:** reading back your
-> feedback, scheduled runs (M3), news, Obsidian, Google Tasks and email (M4).
+> **What works today (M1 + M2):** events from iCal, web pages and web search; LLM ranking
+> with an API key; a markdown digest; suggestions in Google Calendar. **Not yet:** running on
+> a Claude subscription (M3), reading back your feedback and scheduled runs (M4), news,
+> Obsidian, Google Tasks and email (M5).
 
 ---
 
@@ -38,7 +39,9 @@ setx PERSONAL_AGENT_ANTHROPIC_API_KEY "sk-ant-..."   # Windows; then open a new 
 export PERSONAL_AGENT_ANTHROPIC_API_KEY="sk-ant-..."  # Linux/macOS
 ```
 
-The agent reads only this variable, never the generic `ANTHROPIC_API_KEY`.
+The agent reads only this variable, never the generic `ANTHROPIC_API_KEY`. Prefer your
+Claude Pro/Max subscription instead? That arrives in M3; see
+[Using a Claude subscription](#using-a-claude-subscription-planned-m3).
 
 **4. Describe what you like** in [`config/interests.md`](../config/interests.md) (city,
 budget, topics) and check which sources are on in [`config/sources.md`](../config/sources.md).
@@ -181,7 +184,7 @@ not fetched, and each site gets at most one request per second.
 Settings for every output: `plugins` (which content goes there; default all) and
 `min_score` (only items scored at least this; default 0).
 
-| Type | Publishes | Settings | Feedback (M3) |
+| Type | Publishes | Settings | Feedback (M4) |
 |---|---|---|---|
 | `markdown_digest` | `<path>/YYYY-MM-DD.md`, one section per plugin (*Plan* for events), each item with 👍/👎 boxes | `path` (default `digests`, relative to where you run `agent`) | tick a box |
 | `google_calendar` | tentative, *free*-showing events on a calendar the agent creates and owns | `calendar_name` (default `Suggestions`) | keep = accept, delete = reject |
@@ -226,6 +229,40 @@ agent warns you when a permission is missing.
 
 ---
 
+## Using a Claude subscription (planned, M3)
+
+> Not built yet. This section describes how it will work.
+
+Instead of a pay-per-use API key, the agent will be able to do its LLM work (ranking,
+extraction, web search) through **Claude Code** on your Claude Pro or Max plan:
+
+1. Install Claude Code and sign in with your subscription: run `claude`, then `/login`.
+2. Set the provider:
+
+   ```powershell
+   setx PERSONAL_AGENT_LLM_PROVIDER claude_code
+   ```
+
+3. Run as usual: `agent run --dry-run`.
+
+For cloud mode (GitHub Actions), create a long-lived token with `claude setup-token` and store
+it as the repo secret `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN`.
+
+| | API key (`anthropic_api`, default) | Subscription (`claude_code`) |
+|---|---|---|
+| Cost | pay per use, shown per run | included in your plan |
+| Limits | the spend limit you set | your plan's usage limits, shared with your own Claude use |
+| Speed | faster | slower (starts a Claude Code process per call) |
+| Control | exact model, effort and output format | Claude Code's settings; output validated afterwards |
+
+With `claude_code`, your API key is ignored and never used, so a run can't quietly turn into
+paid API usage. If Claude Code is missing, logged out or out of usage, the run still
+completes with keyword ranking and without web sources, and tells you why. Using your
+subscription this way is meant for your own personal agent only; check Anthropic's current
+terms.
+
+---
+
 ## Commands
 
 Global options go before the command: `agent [--config-dir DIR] [--db FILE] [-v] <command>`.
@@ -250,7 +287,9 @@ calls and their estimated cost, and any warnings.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PERSONAL_AGENT_ANTHROPIC_API_KEY` | Anthropic key; without it, keyword ranking only and web sources are skipped | – |
+| `PERSONAL_AGENT_LLM_PROVIDER` | `anthropic_api` or `claude_code` (subscription, from M3) | `anthropic_api` |
+| `PERSONAL_AGENT_ANTHROPIC_API_KEY` | Anthropic key for `anthropic_api`; without it, keyword ranking only and web sources are skipped | – |
+| `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | subscription token for `claude_code` in cloud mode (from M3); locally the Claude Code login is used | – |
 | `PERSONAL_AGENT_MODEL` | Claude model for ranking and extraction | `claude-opus-5-5` |
 | `PERSONAL_AGENT_EFFORT` | reasoning effort: `low`, `medium`, `high` | `low` |
 | `PERSONAL_AGENT_CONFIG_DIR` | folder with the three config files | `./config` |
@@ -276,7 +315,8 @@ Web search is the main cost because opened pages add tens of thousands of tokens
 less: lower `max_queries`, set `fetch_pages: 0` (cheaper, but finds far fewer dated events),
 uncheck the `web` source on days you don't need it, or set `PERSONAL_AGENT_MODEL` to a
 cheaper model such as `claude-sonnet-5-5`. A spend limit on the key's Console workspace is
-the safety net.
+the safety net. From M3 you can also run on your Claude subscription instead
+(`PERSONAL_AGENT_LLM_PROVIDER=claude_code`), within your plan's usage limits.
 
 ---
 

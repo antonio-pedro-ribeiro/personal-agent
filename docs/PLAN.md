@@ -1,7 +1,7 @@
 # Implementation Plan
 
-Builds [`SPEC.md`](SPEC.md) in **four milestones**: events end-to-end first (M1–M3), then news
-and the remaining outputs (M4). Every milestone ends in something runnable, with tests passing
+Builds [`SPEC.md`](SPEC.md) in **five milestones**: events end-to-end first (M1–M4, with M3 adding
+the option to run on a Claude subscription), then news and the remaining outputs (M5). Every milestone ends in something runnable, with tests passing
 on Ubuntu and Windows.
 
 ## Overview
@@ -10,8 +10,9 @@ on Ubuntu and Windows.
 |---|---|---|---|
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline | 2, 3, 4*, 6, 10 |
 | M2 🟡 | **Smart events in Calendar**: LLM, web sources, Google Calendar | Events from web search, Safejourney and AllTera Tribe, LLM-ranked, on the *Suggestions* calendar | 5, 7, 9, 12, 13, 14 |
-| M3 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
-| M4 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
+| M3 | **Claude subscription option**: Claude Code as an alternative LLM provider | `PERSONAL_AGENT_LLM_PROVIDER=claude_code` runs ranking, extraction and web search on your Claude Pro/Max plan instead of an API key | 15 |
+| M4 | **Events MVP**: feedback loop + unattended runs | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone | 8, 11 |
+| M5 | **News & more outputs**, then v1 release | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0` | 1, all |
 
 \* AC 4 is complete in M2, once busy slots come from Google free/busy.
 
@@ -19,7 +20,7 @@ on Ubuntu and Windows.
 live. Waiting on: a real Google sign-in (`agent auth google`) to verify the Calendar output, and
 the AllTera Tribe URL.
 
-Sequence: M1 → M2 → M3 → M4. Inside M4, news and the extra outputs are
+Sequence: M1 → M2 → M3 → M4 → M5. Inside M5, news and the extra outputs are
 independent and can be built in either order.
 
 ## Before starting (owner: you)
@@ -30,8 +31,9 @@ independent and can be built in either order.
 | M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
 | M2 | Home city, timezone, initial topics for `interests.md` |
 | M2 | Google Cloud project with Calendar API enabled and an OAuth client of type **Desktop app**. Set the consent screen to **In production** (unverified is fine for personal use; you'll see a warning screen). In **Testing** status Google expires refresh tokens after 7 days, which would break scheduled runs. |
-| M3 | Decide: cloud mode (private repo OK?) and/or Windows local mode |
-| M4 | Obsidian vault path and how it syncs (git or Obsidian Sync) |
+| M3 | Claude Code installed and signed in with your subscription (`claude`, then `/login`); for cloud mode, a token from `claude setup-token` |
+| M4 | Decide: cloud mode (private repo OK?) and/or Windows local mode |
+| M5 | Obsidian vault path and how it syncs (git or Obsidian Sync) |
 
 ---
 
@@ -111,7 +113,53 @@ fake Google client for idempotency, namespace and scopes (ACs 5, 7, 12); busy-sl
 **Done when:** a real run shows LLM-ranked events from all three sources on the *Suggestions*
 calendar on your phone, with no overlap with busy slots.
 
-## M3 — Events MVP: feedback + unattended runs
+## M3 — Claude subscription option
+Goal: run the agent's LLM work on a Claude Pro/Max subscription through Claude Code, as an
+alternative to a pay-per-use API key. The API stays the default and remains supported.
+
+**Provider setting**
+- `PERSONAL_AGENT_LLM_PROVIDER`: `anthropic_api` (default) or `claude_code`. `llm.from_env()`
+  picks the implementation; Ranker, Extractor and plugins are unchanged (same `LLM` interface).
+
+**`ClaudeCodeLLM`** (`kernel/services/llm_claude_code.py`)
+- Calls the Claude Code CLI non-interactively (`claude -p`) as a subprocess with a timeout,
+  passing the system prompt and the untrusted content the same way as the API path.
+- Asks for JSON matching the pydantic schema, validates it, and retries once with the
+  validation error if the output is invalid.
+- Web search: allows only Claude Code's built-in web search and web fetch tools, capped by the
+  same `max_queries` / `fetch_pages` budget; no file, shell or other tools.
+- Collects the URLs that the search and fetch tools returned (from the CLI's JSON/stream output)
+  so the Extractor's same-site link check still applies; if they can't be read, items need a
+  URL on a site named in the answer's sources, otherwise they are dropped.
+- Model from `PERSONAL_AGENT_MODEL` when set; otherwise Claude Code's default.
+- Cost line reports calls and duration instead of dollars ("included in your plan").
+- Spike first: confirm which CLI flags the installed Claude Code version supports for
+  non-interactive JSON output, tool allowlists and model selection, and how usage limits are
+  reported; record CLI output fixtures for the tests.
+
+**Credentials**
+- Local: the Claude Code login on this machine (`claude`, then `/login` with the subscription).
+- Cloud: `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (created with `claude setup-token`), passed to
+  the subprocess as Claude Code's token variable; the generic name is never read from the
+  user's environment.
+- Never mix: with `claude_code`, `PERSONAL_AGENT_ANTHROPIC_API_KEY` is ignored, and the API key
+  is not passed to the subprocess, so a run can't silently fall back to paid API usage.
+
+**Failure handling**
+- CLI missing, not logged in, or usage limit reached → a clear warning; ranking falls back to
+  keywords and web sources are skipped for that run, as without an API key.
+
+**Docs:** USAGE.md section "Using a Claude subscription" (install, login, setting, limits,
+terms: personal use only).
+
+**Tests:** a fake `claude` executable (or injected runner) returning recorded outputs: valid
+JSON, invalid then valid (retry), not-logged-in, usage-limit, timeout; provider selection from
+env; the API key is not in the subprocess environment.
+
+**Done when:** with `PERSONAL_AGENT_LLM_PROVIDER=claude_code` and no API key set,
+`agent run --dry-run` on the real config ranks events and the `web` source finds dated events.
+
+## M4 — Events MVP: feedback + unattended runs
 Goal: the agent runs by itself every day and learns from what you keep or delete.
 
 **Feedback loop**
@@ -121,8 +169,9 @@ Goal: the agent runs by itself every day and learns from what you keep or delete
 
 **Deployment**
 - `.github/workflows/agent.yml`: daily `schedule` + `workflow_dispatch`; `concurrency` group;
-  `agent.db` on the orphan `state` branch; commit `digests/`; secrets `PERSONAL_AGENT_ANTHROPIC_API_KEY`,
-  `GOOGLE_TOKEN_JSON`; run-log artifact (items, scores, cost).
+  `agent.db` on the orphan `state` branch; commit `digests/`; secrets
+  `PERSONAL_AGENT_ANTHROPIC_API_KEY` or `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (per provider),
+  `PERSONAL_AGENT_GOOGLE_TOKEN_JSON`; run-log artifact (items, scores, cost).
 - `kernel/platform.py` + `agent schedule install|remove`: Task Scheduler on Windows,
   cron/launchd elsewhere.
 - README "Getting started" for cloud and Windows modes.
@@ -133,11 +182,11 @@ the ranking prompt (AC 8); actionlint in CI; scheduler command generation per OS
 **Done when:** a scheduled run (not a manual one) completes unattended and its results can
 be seen and given feedback from Android alone (AC 11).
 
-**Quality check (does not block M4):** after a few days of scheduled runs, review pick
+**Quality check (does not block M5):** after a few days of scheduled runs, review pick
 quality, cost per run (AC 9 is likely tight with 5 web searches) and extraction errors, and
 tune prompts, thresholds or `max_queries`.
 
-## M4 — News, more outputs, v1 release
+## M5 — News, more outputs, v1 release
 Goal: complete the spec.
 
 **News plugin**
@@ -163,15 +212,17 @@ Goal: complete the spec.
 Gmail clients; idempotency and namespace per output.
 
 **Done when:** the digest has *Plan* and *Read* sections (AC 1), each output can be toggled in
-`outputs.md`, and all 14 ACs pass.
+`outputs.md`, and all 15 ACs pass.
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Safejourney / AllTera pages are JS-rendered, login-only or lack dates | No events from them | M2 spike first; feed discovery; fall back to web search with `allowed_domains` |
-| LLM extraction errors (wrong dates) | Bad suggestions | Schema + date validation; source URL required; feedback loop; quality check after M3 |
+| LLM extraction errors (wrong dates) | Bad suggestions | Schema + date validation; source URL required; feedback loop; quality check after M4 |
 | Google OAuth token expiry | Scheduled runs fail silently | Consent screen "In production"; workflow fails loudly; digest notes auth errors |
-| Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; quality check after M3 |
+| Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; quality check after M4 |
 | M2 is the largest milestone | Slips | The spike and LLM services come first; Calendar work can start in parallel against fake clients |
 | GitHub Actions cron delays | Late digests | Acceptable for daily cadence; manual dispatch available |
+| Subscription usage limits hit by a run, or shared with your own Claude use | Run degrades to keyword ranking | Small `max_queries`; clear warning; API provider remains available |
+| Claude Code CLI output format changes between versions | Provider breaks after an update | Spike + recorded fixtures; validate JSON; fail with a clear message |
