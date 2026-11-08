@@ -89,7 +89,7 @@ subscription; `claude_code` is the default:
 | `anthropic_api` | Claude | Anthropic SDK: structured outputs, adaptive thinking, effort, server-side refusal fallbacks, server web search + web fetch tools | `PERSONAL_AGENT_ANTHROPIC_API_KEY` | pay per use; exact cost per run | M2 |
 | `claude_code` (default) | Claude | Claude Code CLI, non-interactive (`claude -p --output-format stream-json --json-schema …`) subprocess in an empty temp folder, with `--safe-mode --strict-mcp-config --disable-slash-commands` and its own `--system-prompt` (user customizations off: a call is ~1k tokens instead of ~260k); only `WebSearch`/`WebFetch` allowed, `--max-turns` from the search budget; answer from `structured_output`, result URLs from the stream's tool results; default model `claude-sonnet-5-5` | local Claude Code login with a Claude Pro/Max subscription; cloud: `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) | included in the plan, within its usage limits; run shows the CLI's notional API cost | M3 |
 | `gemini_api` | Gemini | Google Gen AI SDK (`google-genai`): JSON output with a response schema, Google Search grounding and URL context tools; source URLs from grounding metadata (Gemini 3+ allows schema output and grounding in one request); default model `gemini-3.8-flash` | `PERSONAL_AGENT_GEMINI_API_KEY` (Google AI Studio key) | pay per use (or the API's free tier, with lower limits); cost per run from token usage | M3 |
-| `gemini_cli` | Gemini | Gemini CLI, non-interactive (`gemini -p`) subprocess | *M3 spike (2026-11-08): Gemini CLI 0.36 and 0.67 refuse personal Google accounts (`IneligibleTierError`: "no longer supported for Gemini Code Assist for individuals")* | – | deferred |
+| `gemini_cli` | Gemini | Gemini CLI, non-interactive (`gemini -p "" --output-format stream-json --extensions "" --allowed-mcp-server-names ""`) subprocess in an empty temp folder; only `google_web_search`/`web_fetch` allowed; JSON validated against the schema with one retry; grounding redirect URLs resolved; default model `gemini-3.8-flash` | local Gemini CLI login (`gemini`), optional `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT` *(Gemini CLI 0.36/0.67 rejects personal Google accounts without a Cloud project with `IneligibleTierError`)* | included in plan / quota; run shows notional API cost | M3 |
 
 Rules for all providers:
 - Same prompts, untrusted-content delimiting, JSON validated against the pydantic schema (one
@@ -480,7 +480,7 @@ personal_agent/
     plugin.py      # ContentPlugin / OutputPlugin protocols, registry, entry points
     runner.py      # run loop + router
     services/      # store, ranker, extractor, llm (interface, selection, anthropic_api),
-                   # llm_common, llm_claude_code, llm_gemini_api,
+                   # llm_common, llm_claude_code, llm_gemini_api, llm_gemini_cli,
                    # availability, google, http, checklist
     adapters/      # generic: web_search.py, web_page.py (feed discovery + extraction)
     platform.py    # data dirs, scheduler install (schtasks / cron / launchd)
@@ -533,7 +533,7 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
     LLM call, and a page that links an iCal feed is parsed without the LLM.
 14. Text such as "ignore previous instructions" inside a fetched page or search result has no
     effect on extraction or ranking (fixture test).
-15. With each of `claude_code` and `gemini_api` selected (`gemini_cli` deferred) and no other provider's
+15. With each of `claude_code`, `gemini_api` and `gemini_cli` selected and no other provider's
     credentials set, a run ranks and extracts events; CLI subprocesses receive no API key; a
     missing credential, logged-out CLI or reached limit degrades to keyword ranking with a
     warning.
@@ -549,7 +549,9 @@ SQLite · platformdirs · tzdata · keyring · GitHub Actions.
 - Cost of `web_search`: resolved for now by making `claude_code` (subscription) the default;
   open: do daily scheduled runs fit within a Pro plan's usage limits (M4 quality check)?
 - Measured cost per run on `gemini_api` (needs a key; list prices are in the cost estimate).
-- `gemini_cli`: revisit if Google re-enables CLI access for personal accounts.
+- `gemini_cli`: implemented and contract-tested; personal Google accounts without a Cloud project
+  are rejected by Gemini CLI (`IneligibleTierError`), so live use requires an eligible account or
+  `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT`.
 - Is a private GitHub repo acceptable for storing interests, digests and state? (Required for
   cloud mode; otherwise use Windows local mode.)
 - Obsidian: is the vault git-synced (cloud mode works) or Obsidian Sync-only (local mode)?

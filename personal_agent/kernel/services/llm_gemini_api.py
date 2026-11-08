@@ -24,11 +24,9 @@ from personal_agent.kernel.services.llm import (
     WebSearch,
 )
 from personal_agent.kernel.services.llm_common import (
-    in_domains,
+    finish_search,
     json_schema,
     parse_json,
-    resolve_redirects,
-    rewrite_strings,
     search_instructions,
     with_retry,
 )
@@ -82,7 +80,7 @@ class GeminiApiLLM:
             return reply
 
         _, output = with_retry(call, lambda r: parse_json(r, schema), prompt, NAME)
-        return self._finish(output, schema, urls, web_search)
+        return finish_search(output, schema, urls, web_search, self.resolve)
 
     # --- helpers ------------------------------------------------------------------------
 
@@ -154,17 +152,6 @@ class GeminiApiLLM:
         for candidate in (getattr(response, "candidates", None) or [])[:1]:
             grounding = getattr(candidate, "grounding_metadata", None)
             u.web_searches += len(getattr(grounding, "web_search_queries", None) or [])
-
-    def _finish(
-        self, output: T, schema: type[T], urls: set[str], ws: WebSearch | None
-    ) -> ParseResult[T]:
-        mapping = resolve_redirects(urls, self.resolve)
-        if mapping:
-            output = schema.model_validate(rewrite_strings(output.model_dump(mode="json"), mapping))
-            urls = {t for u in urls if (t := mapping.get(u, u))}  # unresolved links drop out
-        if ws and ws.allowed_domains:
-            urls = {u for u in urls if in_domains(u, ws.allowed_domains)}
-        return ParseResult(output=output, result_urls=urls)
 
 
 def _name(value: Any) -> str:

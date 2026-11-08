@@ -16,6 +16,15 @@ One section per content plugin, one checkbox per source. Format: docs/SPEC.md §
 - [X] **ecstatic-dance-lisboa** — web_page
   - url: https://ecstaticdance.org/dance/ecstatic-dance-lisboa/   ← recurring monthly (3rd Saturday); no feed, tickets via Eventbrite
   - feed: none
+- [X] **hot-clube-portugal** — web_page
+  - url: https://hcp.pt/   ← jazz programme, including events at other venues
+  - feed: none
+- [X] **itjobs-events** — web_page
+  - url: https://www.itjobs.pt/eventos   ← Portuguese tech events, including AI
+  - feed: none   ← iCal feed generates changing event IDs
+- [X] **conscious-portugal** — web_page
+  - url: https://www.consciousportugal.com/events   ← ecstatic dance and related events
+  - feed: none
 - [ ] **example-ical** — ical
   - url: https://example.com/calendar.ics
 

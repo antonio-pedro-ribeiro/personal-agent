@@ -5,10 +5,9 @@ checks, key rotation, backups), see [`OPERATIONS.md`](OPERATIONS.md). For the de
 for what is built and what is next, see [`PLAN.md`](PLAN.md).
 
 > **What works today (M1–M3):** events from iCal, web pages and web search; LLM ranking on
-> your Claude Pro/Max plan (default), a Claude API key or a Gemini API key; a markdown digest;
-> suggestions in Google Calendar. **Not yet:** reading back your feedback and scheduled runs
-> (M4), news, Obsidian, Google Tasks and email (M5). Gemini CLI is deferred (see
-> [Choosing an LLM provider](#choosing-an-llm-provider)).
+> your Claude Pro/Max plan (default), a Claude API key, a Gemini API key, or Gemini CLI; a
+> markdown digest; suggestions in Google Calendar. **Not yet:** reading back your feedback and
+> scheduled runs (M4), news, Obsidian, Google Tasks and email (M5).
 
 ---
 
@@ -239,7 +238,7 @@ Claude subscription (the default) or pay per use with a Claude or Gemini API key
 | `claude_code` (default) | Claude | Claude Code, signed in with a Claude Pro or Max plan | included in your plan | `claude-sonnet-5-5` |
 | `anthropic_api` | Claude | an Anthropic API key | pay per use | `claude-opus-5-5` |
 | `gemini_api` | Gemini | a Gemini API key from Google AI Studio | pay per use, or the free tier | `gemini-3.8-flash` |
-| `gemini_cli` | Gemini | *deferred*: Google no longer accepts Gemini CLI sign-ins from personal accounts | – | – |
+| `gemini_cli` | Gemini | Gemini CLI (`gemini`), signed in with an eligible Google account (plus `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT` if required) | included in your plan / quota | `gemini-3.8-flash` |
 
 Pick one with `PERSONAL_AGENT_LLM_PROVIDER`; the rest of your setup doesn't change.
 
@@ -262,9 +261,14 @@ Pick one with `PERSONAL_AGENT_LLM_PROVIDER`; the rest of your setup doesn't chan
 2. `setx PERSONAL_AGENT_GEMINI_API_KEY "..."` and `setx PERSONAL_AGENT_LLM_PROVIDER gemini_api`.
 3. Cloud mode: store the key as the repo secret `PERSONAL_AGENT_GEMINI_API_KEY`.
 
-**Gemini CLI (`gemini_cli`): deferred.** Tested in November 2026: Gemini CLI (0.36 and 0.67)
-refuses sign-in with a personal Google account ("no longer supported for Gemini Code Assist for
-individuals"). Use `gemini_api` for Gemini.
+**Gemini CLI (`gemini_cli`, local only)**
+1. Install Gemini CLI (`npm install -g @google/gemini-cli`), run `gemini` once to sign in, and set
+   `setx PERSONAL_AGENT_LLM_PROVIDER gemini_cli`.
+2. Note: Gemini CLI (0.36 / 0.67) rejects personal Google accounts on the free tier
+   (`IneligibleTierError: no longer supported for Gemini Code Assist for individuals`); if your
+   account requires a Google Cloud project for Code Assist, set
+   `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT`, or use `gemini_api` instead. Use `gemini_api` in cloud
+   mode.
 
 **How they compare**
 
@@ -314,11 +318,12 @@ calls and their estimated cost, and any warnings.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PERSONAL_AGENT_LLM_PROVIDER` | `claude_code`, `anthropic_api` or `gemini_api` (`gemini_cli` is deferred); without a working provider, keyword ranking only and web sources are skipped | `claude_code` |
+| `PERSONAL_AGENT_LLM_PROVIDER` | `claude_code`, `anthropic_api`, `gemini_api` or `gemini_cli`; without a working provider, keyword ranking only and web sources are skipped | `claude_code` |
 | `PERSONAL_AGENT_ANTHROPIC_API_KEY` | Anthropic key for `anthropic_api` | – |
 | `PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN` | subscription token for `claude_code` in cloud mode; locally the Claude Code login is used | – |
 | `PERSONAL_AGENT_GEMINI_API_KEY` | Google AI Studio key for `gemini_api` | – |
-| `PERSONAL_AGENT_MODEL` | model of the chosen vendor for ranking and extraction (a model of another vendor is ignored with a warning) | `claude-sonnet-5-5` (`claude_code`), `claude-opus-5-5` (`anthropic_api`), `gemini-3.8-flash` (`gemini_api`) |
+| `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT` | Google Cloud project ID for `gemini_cli` when required by the account | – |
+| `PERSONAL_AGENT_MODEL` | model of the chosen vendor for ranking and extraction (a model of another vendor is ignored with a warning) | `claude-sonnet-5-5` (`claude_code`), `claude-opus-5-5` (`anthropic_api`), `gemini-3.8-flash` (`gemini_api`, `gemini_cli`) |
 | `PERSONAL_AGENT_EFFORT` | reasoning effort: `low`, `medium`, `high` (mapped to the vendor's control where available) | `low` |
 | `PERSONAL_AGENT_CONFIG_DIR` | folder with the three config files | `./config` |
 | `PERSONAL_AGENT_DATA_DIR` | folder for `agent.db` (state and caches) | platform data folder, e.g. `%LOCALAPPDATA%\personal-agent` |

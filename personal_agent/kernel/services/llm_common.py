@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ValidationError
 
-from personal_agent.kernel.services.llm import LLMError, LLMUnavailable, WebSearch
+from personal_agent.kernel.services.llm import LLMError, LLMUnavailable, ParseResult, WebSearch
 
 # Environment variables a CLI subprocess may inherit: what the OS and the CLI need to find
 # their home, config and temp folders, and nothing else. API keys and tokens never pass.
@@ -36,6 +36,7 @@ _SECRET_HINTS = ("API_KEY", "APIKEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL
 _UNAVAILABLE_PATTERNS = (
     r"not logged in",
     r"please run /login",
+    r"set an auth method",
     r"invalid api key",
     r"authentication",
     r"unauthori[sz]ed",
@@ -44,9 +45,11 @@ _UNAVAILABLE_PATTERNS = (
     r"limit reached",
     r"rate limit",
     r"quota",
+    r"resource_exhausted",
     r"credit balance",
     r"ineligible ?tier",
     r"no longer supported",
+    r"google_cloud_project",
 )
 
 REDIRECT_HOSTS = {"vertexaisearch.cloud.google.com"}  # Gemini grounding links
@@ -107,7 +110,44 @@ def with_retry[R](
     raise LLMError(f"{name}: invalid JSON after one retry ({error})")
 
 
-# --- CLI subprocesses -------------------------------------------------------------------
+def json_events(stdout: str) -> list[dict[str, Any]]:
+    """``stream-json`` lines (or one ``json`` object); unparseable lines are ignored."""
+    events: list[dict[str, Any]] = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    if not events and stdout.strip().startswith("{"):
+        try:
+            whole = json.loads(stdout.strip())
+        except json.JSONDecodeError:
+            whole = None
+        if isinstance(whole, dict):
+            events.append(whole)
+    return events
+
+
+def finish_search[M: BaseModel](
+    output: M,
+    schema: type[M],
+    urls: set[str],
+    ws: WebSearch | None,
+    resolve: Callable[[str], str | None] | None = None,
+) -> ParseResult[M]:
+    """Resolve redirect URLs (rewriting model output to match) and apply ``allowed_domains``."""
+    mapping = resolve_redirects(urls, resolve)
+    if mapping:
+        output = schema.model_validate(rewrite_strings(output.model_dump(mode="json"), mapping))
+        urls = {t for u in urls if (t := mapping.get(u, u))}  # unresolved links drop out
+    if ws and ws.allowed_domains:
+        urls = {u for u in urls if in_domains(u, ws.allowed_domains)}
+    return ParseResult(output=output, result_urls=urls)
 
 
 @dataclass

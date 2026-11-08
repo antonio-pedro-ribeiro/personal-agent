@@ -39,7 +39,7 @@ flowchart TD
             SVC_STORE[("SQLite Store (store.py)<br/>• items (dedupe/first_seen)<br/>• rankings (scores/reasons)<br/>• deliveries (item_id, output_id)<br/>• feedback (signal, at)")]
             SVC_RANKER["Ranker (ranker.py)<br/>Prompt assembly + LLM scoring"]
             SVC_EXTRACT["Extractor (extractor.py)<br/>Schema-validated entity extraction"]
-            SVC_LLM["LLM Service (llm*.py)<br/>• Claude Code CLI (default)<br/>• Anthropic API / Gemini API"]
+            SVC_LLM["LLM Service (llm*.py)<br/>• Claude Code CLI (default)<br/>• Anthropic API / Gemini API / Gemini CLI"]
             SVC_AVAIL["Availability (availability.py)<br/>Google Calendar Free/Busy checks"]
             SVC_AUTH["Google Auth (google.py)<br/>Scoped least-privilege OAuth"]
             SVC_HTTP["HTTP Service (http.py)<br/>Rate limits, caching, user-agent"]
@@ -195,7 +195,7 @@ Because configurations are plain Markdown checklists, users can edit them direct
 - **Store (`store.py`)**: Embedded SQLite database (`agent.db`) managing `items`, `rankings`, `deliveries`, and `feedback`.
 - **Ranker (`ranker.py`)**: Batch scoring engine with prompt construction including the top 20 recent user feedback signals. Falls back to keyword-overlap ranking when no LLM key is configured.
 - **Extractor (`extractor.py`)**: Schema-validated entity extraction from raw web text using the LLM.
-- **LLM Abstraction (`llm.py`)**: Uniform provider interface for structured parsing. `PERSONAL_AGENT_LLM_PROVIDER` selects Claude Code CLI (`claude_code`, default, `llm_claude_code.py`), Anthropic API (`anthropic_api`, `llm.py`) or Gemini API (`gemini_api`, `llm_gemini_api.py`); shared JSON retry, clean-environment subprocess runner and redirect resolution live in `llm_common.py`. A `Guarded` wrapper turns the first "unavailable" error (logged out, bad key, limit) into fail-fast for the rest of the run. Gemini CLI (`gemini_cli`) is deferred.
+- **LLM Abstraction (`llm.py`)**: Uniform provider interface for structured parsing. `PERSONAL_AGENT_LLM_PROVIDER` selects Claude Code CLI (`claude_code`, default, `llm_claude_code.py`), Anthropic API (`anthropic_api`, `llm.py`), Gemini API (`gemini_api`, `llm_gemini_api.py`) or Gemini CLI (`gemini_cli`, `llm_gemini_cli.py`); shared JSON retry, clean-environment subprocess runner and redirect resolution live in `llm_common.py`. A `Guarded` wrapper turns the first "unavailable" error (logged out, bad key, limit) into fail-fast for the rest of the run.
 - **Availability (`availability.py`)**: Queries Google Calendar Free/Busy API to eliminate suggestions conflicting with the user's schedule.
 - **Google Auth (`google.py`)**: Scoped token management storing credentials in the OS keyring (locally) or environment variables (cloud).
 - **HTTP Client (`http.py`)**: Centralized `httpx` client enforcing rate limits (1 req/s per host), timeouts (20s), and user-agent headers.

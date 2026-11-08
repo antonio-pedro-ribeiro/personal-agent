@@ -1,8 +1,8 @@
 """LLM access for the kernel ``Ranker`` and ``Extractor``. Plugins never call this directly.
 
-``PERSONAL_AGENT_LLM_PROVIDER`` picks the implementation (``claude_code`` by default, and
-``gemini_api``, in their own modules; ``anthropic_api`` here). The model comes from
-``PERSONAL_AGENT_MODEL`` (each provider has a default) and each provider reads only its own
+``PERSONAL_AGENT_LLM_PROVIDER`` picks the implementation (``claude_code`` by default,
+``gemini_api`` and ``gemini_cli``, in their own modules; ``anthropic_api`` here). The model comes
+from ``PERSONAL_AGENT_MODEL`` (each provider has a default) and each provider reads only its own
 ``PERSONAL_AGENT_*`` credential, passed explicitly, so the generic ``ANTHROPIC_API_KEY`` /
 ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` are never used.
 """
@@ -24,6 +24,7 @@ DEFAULT_PROVIDER = "claude_code"  # Claude Pro/Max subscription: no per-run cost
 API_KEY_ENV = "PERSONAL_AGENT_ANTHROPIC_API_KEY"
 CLAUDE_CODE_TOKEN_ENV = "PERSONAL_AGENT_CLAUDE_CODE_OAUTH_TOKEN"
 GEMINI_API_KEY_ENV = "PERSONAL_AGENT_GEMINI_API_KEY"
+GOOGLE_CLOUD_PROJECT_ENV = "PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT"
 MODEL_ENV = "PERSONAL_AGENT_MODEL"
 EFFORT_ENV = "PERSONAL_AGENT_EFFORT"
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -326,10 +327,16 @@ def select(
         model, note = _model(env, ("gemini",), DEFAULT_GEMINI_MODEL)
         impl = GeminiApiLLM(api_key=key, model=model, effort=effort, resolve=resolve)
     elif name == "gemini_cli":
-        return None, [
-            "gemini_cli is deferred: Google no longer accepts Gemini CLI sign-ins from personal "
-            "accounts; use gemini_api"
-        ]
+        from personal_agent.kernel.services.llm_gemini_cli import GeminiCliLLM
+
+        exe = shutil.which("gemini")
+        if exe is None:
+            return None, ["Gemini CLI (`gemini`) not found on PATH"]
+        model, note = _model(env, ("gemini",), DEFAULT_GEMINI_MODEL)
+        project = env.get(GOOGLE_CLOUD_PROJECT_ENV, "").strip() or None
+        impl = GeminiCliLLM(
+            command=[exe], model=model, effort=effort, project=project, resolve=resolve
+        )
     else:
         return None, [f"unknown {PROVIDER_ENV} '{name}' (expected one of {', '.join(PROVIDERS)})"]
     return Guarded(impl), [note] if note else []

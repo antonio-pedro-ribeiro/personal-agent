@@ -1,6 +1,6 @@
 """Provider contract tests (ACs 15, 16): the same documents and scenarios run through every LLM
 provider with faked vendor responses: SDK fakes for the APIs, a fake runner or executable for
-Claude Code, and recorded CLI output from the M3 spike.
+Claude Code and Gemini CLI, and recorded CLI output from the M3 spike.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from personal_agent.kernel.services.llm_common import (
     run_subprocess,
 )
 from personal_agent.kernel.services.llm_gemini_api import GeminiApiLLM
+from personal_agent.kernel.services.llm_gemini_cli import GeminiCliLLM
 from personal_agent.kernel.services.ranker import LLMRanker
 from tests.conftest import LISBON, NOW
 
@@ -193,26 +194,109 @@ class FakeGenai:
         raise Status(429, "RESOURCE_EXHAUSTED")
 
 
-def gemini_llm(outcomes: list[tuple[Any, ...]]) -> GeminiApiLLM:
+def _redirect_resolver(outcomes: list[tuple[Any, ...]]) -> Callable[[str], str | None]:
     targets: dict[str, str] = {}
-
-    def resolve(url: str) -> str | None:
-        return targets.get(url)
-
     for kind, *rest in outcomes:
         if kind == "ok":
             for i, u in enumerate(rest[1]):
                 targets[f"{REDIRECT}{i}"] = u
+    return targets.get
+
+
+def gemini_llm(outcomes: list[tuple[Any, ...]]) -> GeminiApiLLM:
+    resolve = _redirect_resolver(outcomes)
     return GeminiApiLLM(api_key="test", model="gemini-3.8-flash", client=FakeGenai(outcomes),
                         resolve=resolve)  # fmt: skip
+
+
+def gemini_cli_stream(
+    text: str,
+    urls: list[str] = (),  # type: ignore[assignment]
+    result_extra: dict[str, Any] | None = None,
+) -> str:
+    events: list[dict[str, Any]] = [{"type": "init", "session_id": "sess-12345678", "model": "m"}]
+    if urls:
+        events.append(
+            {
+                "type": "tool_use",
+                "tool_name": "google_web_search",
+                "tool_id": "call-1",
+                "parameters": {"query": "q"},
+            }
+        )
+        sources = "\n".join(f"[{i + 1}] Hit ({u})" for i, u in enumerate(urls))
+        events.append(
+            {
+                "type": "tool_result",
+                "tool_id": "call-1",
+                "status": "success",
+                "output": f"Search results:\n{sources}",
+            }
+        )
+    if text:
+        events.append({"type": "message", "role": "assistant", "content": text, "delta": True})
+    base: dict[str, Any] = {
+        "type": "result",
+        "status": "success",
+        "stats": {
+            "total_tokens": 1250,
+            "input_tokens": 1000,
+            "output_tokens": 250,
+            "cached": 0,
+            "input": 1000,
+            "duration_ms": 1500,
+            "tool_calls": 1 if urls else 0,
+        },
+    }
+    events.append({**base, **(result_extra or {})})
+    return "\n".join(json.dumps(e) for e in events) + "\n"
+
+
+class FakeGeminiCliRunner:
+    def __init__(self, outcomes: list[tuple[Any, ...]]) -> None:
+        self.outcomes = outcomes
+        self.calls: list[tuple[list[str], str, dict[str, str]]] = []
+
+    def __call__(self, argv: list[str], stdin: str, env: dict[str, str], t: float) -> CliResult:
+        self.calls.append((argv, stdin, env))
+        kind, *rest = self.outcomes.pop(0)
+        if kind == "ok":
+            data, urls = rest
+            redirects = [f"{REDIRECT}{i}" for i, _ in enumerate(urls)]
+            text = json.dumps(data)
+            for i, u in enumerate(urls):
+                text = text.replace(u, f"{REDIRECT}{i}")
+            return CliResult(0, gemini_cli_stream(text, redirects), "")
+        if kind == "bad":
+            return CliResult(0, gemini_cli_stream(rest[0]), "")
+        if kind == "refuse":
+            return CliResult(0, gemini_cli_stream("", result_extra={"finish_reason": "SAFETY"}), "")
+        if kind == "logged_out":
+            return CliResult(1, "", (FIXTURES / "gemini_cli_ineligible.txt").read_text("utf-8"))
+        err = {
+            "status": "error",
+            "error": {"type": "Error", "message": "429 RESOURCE_EXHAUSTED: quota exceeded"},
+        }
+        return CliResult(1, gemini_cli_stream("", result_extra=err), "")
+
+
+def gemini_cli_llm(outcomes: list[tuple[Any, ...]]) -> GeminiCliLLM:
+    resolve = _redirect_resolver(outcomes)
+    return GeminiCliLLM(
+        command=["gemini"],
+        model="gemini-3.8-flash",
+        resolve=resolve,
+        runner=FakeGeminiCliRunner(outcomes),
+    )
 
 
 PROVIDERS: dict[str, Callable[[list[tuple[Any, ...]]], Any]] = {
     "anthropic_api": anthropic_llm,
     "claude_code": claude_code_llm,
     "gemini_api": gemini_llm,
+    "gemini_cli": gemini_cli_llm,
 }
-SCHEMA_FREE = ["claude_code", "gemini_api"]  # providers whose output may need a retry
+SCHEMA_FREE = ["claude_code", "gemini_api", "gemini_cli"]  # providers whose output may need a retry
 
 
 # --- contract: documents and search ------------------------------------------------------
@@ -353,8 +437,11 @@ def test_claude_code_drops_urls_outside_allowed_domains() -> None:
     }
 
 
-def test_cli_subprocess_gets_no_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC 15: a real subprocess (fake executable) sees no API key, only the CLI's own token."""
+@pytest.mark.parametrize("cli_name", ["claude_code", "gemini_cli"])
+def test_cli_subprocess_gets_no_api_key(
+    cli_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC 15: a real subprocess (fake executable) sees no API key, only the CLI's own variables."""
     for name in (
         "PERSONAL_AGENT_ANTHROPIC_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -367,13 +454,20 @@ def test_cli_subprocess_gets_no_api_key(tmp_path: Path, monkeypatch: pytest.Monk
     reply, dump = tmp_path / "reply.json", tmp_path / "env.json"
     reply.write_text(json.dumps(GOOD), encoding="utf-8")
     script = str(Path(__file__).parent / "fake_claude.py")
-    model = ClaudeCodeLLM(command=[sys.executable, script, str(reply), str(dump)], model="m",
-                          oauth_token="oauth-123")  # fmt: skip
+    cmd = [sys.executable, script, str(reply), str(dump)]
+    if cli_name == "claude_code":
+        model: Any = ClaudeCodeLLM(command=cmd, model="m", oauth_token="oauth-123")
+    else:
+        model = GeminiCliLLM(command=cmd, model="gemini-3.8-flash", project="proj-123")
     assert model.parse(system="s", prompt="p", schema=Scores).output.items[0]["title"]
     seen = json.loads(dump.read_text(encoding="utf-8"))
     leaked = [n for n in seen["names"] if any(h in n.upper() for h in ("KEY", "SECRET"))]
     assert leaked == []
-    assert "SOME_SERVICE_TOKEN" not in seen["names"] and seen["token"] == "oauth-123"
+    assert "SOME_SERVICE_TOKEN" not in seen["names"]
+    if cli_name == "claude_code":
+        assert seen["token"] == "oauth-123"
+    else:
+        assert seen["project"] == "proj-123"
     assert model.usage.seconds == pytest.approx(1.2)
 
 
@@ -423,6 +517,48 @@ def test_gemini_usage_and_cost() -> None:
     u = model.usage
     assert (u.input_tokens, u.output_tokens, u.web_searches) == (1000, 250, 1)
     assert u.cost_usd("gemini-3.8-flash") == pytest.approx((1000 * 0.75 + 250 * 3.75) / 1e6 + 0.014)
+
+
+def test_recorded_gemini_cli_ineligible_is_unavailable() -> None:
+    stderr = (FIXTURES / "gemini_cli_ineligible.txt").read_text("utf-8")
+    model = GeminiCliLLM(
+        command=["gemini"],
+        model="gemini-3.8-flash",
+        runner=lambda *a: CliResult(1, "", stderr),
+    )
+    with pytest.raises(LLMUnavailable, match="IneligibleTierError"):
+        model.parse(system="s", prompt="p", schema=Scores)
+
+
+def test_gemini_cli_flags_restrict_tools_and_extensions() -> None:
+    runner = FakeGeminiCliRunner(
+        [("ok", {"items": []}, []), ("ok", {"items": []}, []), ("ok", {"items": []}, [])]
+    )
+    model = GeminiCliLLM(command=["gemini"], model="gemini-3.8-flash", runner=runner)
+    model.parse(system="SYS", prompt="p", schema=Scores)
+    model.parse(
+        system="SYS",
+        prompt="p",
+        schema=Scores,
+        web_search=WebSearch(max_uses=2, fetch_uses=0, allowed_domains=["a.test"]),
+    )
+    model.parse(
+        system="SYS",
+        prompt="p",
+        schema=Scores,
+        web_search=WebSearch(max_uses=2, fetch_uses=1),
+    )
+    plain, search_only, search_fetch = (c[0] for c in runner.calls)
+    for argv in (plain, search_only, search_fetch):
+        assert "-p" in argv and "--output-format" in argv
+        assert argv[argv.index("--extensions") + 1] == ""
+        assert argv[argv.index("--allowed-mcp-server-names") + 1] == ""
+        assert argv[argv.index("--model") + 1] == "gemini-3.8-flash"
+    assert plain[plain.index("--allowed-tools") + 1] == ""
+    assert search_only[search_only.index("--allowed-tools") + 1] == "google_web_search"
+    assert search_fetch[search_fetch.index("--allowed-tools") + 1] == "google_web_search,web_fetch"
+    assert "SYS" in runner.calls[0][1] and '"items"' in runner.calls[0][1]
+    assert "at most 2 web search" in runner.calls[1][1] and "a.test" in runner.calls[1][1]
 
 
 def test_parse_json_tolerates_fences_and_chatter() -> None:
@@ -487,9 +623,20 @@ def test_select_gemini_api() -> None:
     assert model.model == "gemini-3.1-flash-lite"
 
 
-def test_select_deferred_and_unknown_providers() -> None:
+def test_select_gemini_cli_and_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(llm.shutil, "which", lambda name: None)
     model, notes = llm.select({"PERSONAL_AGENT_LLM_PROVIDER": "gemini_cli"})
-    assert model is None and "deferred" in notes[0]
+    assert model is None and "not found" in notes[0]
+    monkeypatch.setattr(llm.shutil, "which", lambda name: "/usr/bin/gemini")
+    env = {
+        "PERSONAL_AGENT_LLM_PROVIDER": "gemini_cli",
+        "PERSONAL_AGENT_MODEL": "claude-opus-5-5",
+        "PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT": "my-project",
+    }
+    model, notes = llm.select(env)
+    assert model is not None and model.provider == "gemini_cli" and model.billing == "plan"
+    assert model.model == llm.DEFAULT_GEMINI_MODEL and "not a model" in notes[0]
+    assert isinstance(model.inner, GeminiCliLLM) and model.inner.project == "my-project"
     model, notes = llm.select({"PERSONAL_AGENT_LLM_PROVIDER": "gpt"})
     assert model is None and "unknown" in notes[0]
 
@@ -499,6 +646,10 @@ def test_cost_line_for_plan_and_api() -> None:
     plan.parse(system="s", prompt="p", schema=Scores)
     line = cli._cost_line(SimpleNamespace(llm=plan))  # type: ignore[arg-type]
     assert line and "claude_code" in line and "included in plan" in line
+    gcli = Guarded(gemini_cli_llm([("ok", {"items": []}, [])]))
+    gcli.parse(system="s", prompt="p", schema=Scores)
+    gline = cli._cost_line(SimpleNamespace(llm=gcli))  # type: ignore[arg-type]
+    assert gline and "gemini_cli" in gline and "included in plan" in gline
     api = gemini_llm([("ok", {"items": []}, [])])
     api.parse(system="s", prompt="p", schema=Scores)
     line = cli._cost_line(SimpleNamespace(llm=api))  # type: ignore[arg-type]

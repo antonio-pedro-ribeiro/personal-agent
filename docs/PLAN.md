@@ -9,7 +9,7 @@ Claude-subscription and Gemini providers), then news and the remaining outputs (
 | ----- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
 | M1 ✅ | **Foundation**: scaffold, kernel, digest output, events from iCal                   | `agent run --dry-run` shows filtered, keyword-ranked events from an `.ics` source, offline                                                         | 2, 3, 4*, 6, 10     |
 | M2 ✅ | **Smart events in Calendar**: LLM, web sources, Google Calendar                     | Events from web search, web pages and iCal feeds, LLM-ranked, on the *Suggestions* calendar                                                          | 5, 7, 9, 12, 13, 14 |
-| M3 ✅ | **Alternative LLM providers**: Claude subscription (now the default), Gemini API | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code` or `gemini_api` runs ranking, extraction and web search without the Claude API key (`gemini_cli` deferred) | 15, 16              |
+| M3 ✅ | **Alternative LLM providers**: Claude subscription (now the default), Gemini API & CLI | `PERSONAL_AGENT_LLM_PROVIDER` = `claude_code`, `gemini_api` or `gemini_cli` runs ranking, extraction and web search without the Claude API key | 15, 16              |
 | M4    | **Events MVP**: feedback loop + unattended runs                                     | Runs daily in the cloud (or Windows), learns from feedback, usable from Android alone                                                                  | 8, 11               |
 | M5    | **News & more outputs**, then v1 release                                            | News in the digest; Obsidian, Google Tasks and email outputs; every AC tested; `v1.0.0`                                                              | 1, all              |
 
@@ -21,9 +21,11 @@ feed discovery, a Meetup iCal source, Google sign-in, free/busy, and a test even
 
 ✅ M3: built on 2026-11-08. `claude_code` verified live (`agent run --dry-run` with no API key:
 5 calls, 3 web searches, ~48 s, included in plan, ~$0.14 at API prices) and made the **default
-provider**. `gemini_api` built and contract-tested against SDK fakes; its live check waits for
-a `PERSONAL_AGENT_GEMINI_API_KEY`. `gemini_cli` deferred: the spike found Gemini CLI refuses
-personal Google accounts. Spike findings (recorded in `tests/fixtures/llm/`):
+provider**. `gemini_api` and `gemini_cli` built and contract-tested against SDK/CLI fakes;
+`gemini_api` live check waits for a `PERSONAL_AGENT_GEMINI_API_KEY`, and `gemini_cli` live use
+requires an eligible Google account or `PERSONAL_AGENT_GOOGLE_CLOUD_PROJECT` (Gemini CLI 0.36/0.67
+rejects personal Google accounts without a Cloud project). Spike findings (recorded in
+`tests/fixtures/llm/`):
 - Claude Code 2.1: `-p --output-format stream-json --verbose --json-schema` gives the answer as
   `structured_output`; WebSearch results arrive as `tool_use_result.results[].content[].url`,
   WebFetch as `tool_use_result.{url, code}`. Without `--safe-mode --strict-mcp-config
@@ -139,8 +141,7 @@ calendar on your phone, with no overlap with busy slots.
 
 ## M3 — Alternative LLM providers: Claude subscription and Gemini ✅
 
-> Built as planned except: `claude_code` became the default provider, and `gemini_cli` is
-> deferred (see the M3 note at the top).
+> Built as planned, with `claude_code` made the default provider (see the M3 note at the top).
 
 Goal: besides the pay-per-use Claude API (default, done in M2), run the agent's LLM work on
 

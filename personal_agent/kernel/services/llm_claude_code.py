@@ -28,6 +28,7 @@ from personal_agent.kernel.services.llm_common import (
     clean_env,
     cli_failure,
     in_domains,
+    json_events,
     json_schema,
     parse_json,
     run_subprocess,
@@ -112,7 +113,7 @@ class ClaudeCodeLLM:
     def _run(self, argv: list[str], prompt: str) -> tuple[dict[str, Any], set[str]]:
         extra = {TOKEN_VAR: self.oauth_token} if self.oauth_token else None
         cli = self.runner(argv, prompt, clean_env(extra), self.timeout)
-        events = _events(cli.stdout)
+        events = json_events(cli.stdout)
         urls, searches = _tool_results(events)
         result = next((e for e in reversed(events) if e.get("type") == "result"), None)
         if result is None:
@@ -144,22 +145,6 @@ class ClaudeCodeLLM:
         if structured is not None:
             return schema.model_validate(structured)
         return parse_json(str(result.get("result") or ""), schema)
-
-
-def _events(stdout: str) -> list[dict[str, Any]]:
-    """``stream-json`` lines (or one ``json`` object); unparseable lines are ignored."""
-    events: list[dict[str, Any]] = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(event, dict):
-            events.append(event)
-    return events
 
 
 def _tool_results(events: list[dict[str, Any]]) -> tuple[set[str], int]:

@@ -109,7 +109,7 @@ agent schedule install|remove    *
 - Python 3.12+ on Windows, Linux or macOS (or just a private GitHub repo for cloud mode)
 - An LLM for web search / web page sources and ranking (without one, only feed sources and a
   keyword ranker work): by default Claude Code signed in with a Claude Pro/Max plan; or a Claude
-  or Gemini API key (`PERSONAL_AGENT_LLM_PROVIDER` = `anthropic_api` / `gemini_api`)
+  or Gemini API key or Gemini CLI (`PERSONAL_AGENT_LLM_PROVIDER` = `anthropic_api` / `gemini_api` / `gemini_cli`)
 - Google OAuth credentials, if a Google output is enabled
 
 ## Docs
