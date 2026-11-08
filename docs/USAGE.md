@@ -201,10 +201,15 @@ busy on your main calendar, not what the events are. One-time setup:
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), create a project.
 2. **APIs & Services → Library:** enable the **Google Calendar API**.
-3. **APIs & Services → OAuth consent screen:** user type *External*, add yourself as a test
-   user, then click **Publish app** so the status is **In production**. You don't need
-   Google's verification for personal use; you'll see an "unverified app" warning once.
-   Leaving it in *Testing* makes Google expire the sign-in after 7 days.
+3. **Google Auth Platform (OAuth consent screen):** app name, your email, user type
+   *External*, accept the API Services User Data Policy, and add yourself under
+   **Audience → Test users**. The app starts in **Testing**:
+   - *Testing* works right away, but Google expires the sign-in after **7 days**; run
+     `agent auth google` again when it does. Fine for manual runs.
+   - For unattended scheduled runs, **publish** it (*Audience → Publish app*). Google only
+     allows that once the *Branding* page has public links: at least an app home page and a
+     privacy policy. You don't need Google's verification for personal use; you'll see an
+     "unverified app" warning when signing in.
 4. **Credentials → Create credentials → OAuth client ID → Desktop app.** Download the JSON.
 5. Enable the output in `config/outputs.md` (`- [x] **calendar** — google_calendar`), then:
 
@@ -373,5 +378,5 @@ re-extract everything once. Nothing in it is needed by Google: the calendar keep
 | A source returns 0 items | run `agent sources test <id>`; for `web_page`, the site may only report past events; for `web_search`, keep `fetch_pages` ≥ 1 |
 | `Google is not connected` | run `agent auth google` |
 | `Google token lacks ...` | you enabled an output needing a new permission: run `agent auth google` again |
-| Sign-in stops working after a week | the consent screen is still in *Testing*; publish it (step 3 of the Google setup) and re-run `agent auth google` |
+| Sign-in stops working after a week | the app is still in *Testing*: re-run `agent auth google`, or publish it (step 3 of the Google setup) |
 | An event shows up again after deleting `agent.db` | expected; the agent lost its memory of what it sent |

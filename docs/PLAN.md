@@ -30,7 +30,8 @@ independent and can be built in either order.
 | M2 | `PERSONAL_AGENT_ANTHROPIC_API_KEY` |
 | M2 | AllTera Tribe official URL; confirm safejourney.pt is the right site |
 | M2 | Home city, timezone, initial topics for `interests.md` |
-| M2 | Google Cloud project with Calendar API enabled and an OAuth client of type **Desktop app**. Set the consent screen to **In production** (unverified is fine for personal use; you'll see a warning screen). In **Testing** status Google expires refresh tokens after 7 days, which would break scheduled runs. |
+| M2 ✅ | Google Cloud project `personal-agent` with Calendar API enabled and a **Desktop app** OAuth client (done; app in **Testing**, so the sign-in expires every 7 days) |
+| M4 | Publish the OAuth app (**In production**) so scheduled runs don't lose the sign-in weekly; needs a public home page and privacy-policy link on the Branding page |
 | M3 | Whichever providers you want: Claude Code signed in with your subscription (`claude`, then `/login`; for cloud, `claude setup-token`); a Gemini API key from Google AI Studio; Gemini CLI signed in with your Google account |
 | M4 | Decide: cloud mode (private repo OK?) and/or Windows local mode |
 | M5 | Obsidian vault path and how it syncs (git or Obsidian Sync) |
@@ -237,7 +238,7 @@ Gmail clients; idempotency and namespace per output.
 |---|---|---|
 | Safejourney / AllTera pages are JS-rendered, login-only or lack dates | No events from them | M2 spike first; feed discovery; fall back to web search with `allowed_domains` |
 | LLM extraction errors (wrong dates) | Bad suggestions | Schema + date validation; source URL required; feedback loop; quality check after M4 |
-| Google OAuth token expiry | Scheduled runs fail silently | Consent screen "In production"; workflow fails loudly; digest notes auth errors |
+| Google OAuth token expiry (7 days while the app is in Testing) | Scheduled runs fail silently | Publish the app before M4 scheduling; workflow fails loudly; digest notes auth errors |
 | Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; quality check after M4 |
 | M2 is the largest milestone | Slips | The spike and LLM services come first; Calendar work can start in parallel against fake clients |
 | GitHub Actions cron delays | Late digests | Acceptable for daily cadence; manual dispatch available |
