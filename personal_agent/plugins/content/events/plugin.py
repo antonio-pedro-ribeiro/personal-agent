@@ -60,6 +60,14 @@ class EventsPlugin:
             if ctx.web is None:
                 raise RuntimeError("generic web sources are not available in this run")
             if source.type == "web_search":
+                included, excluded = ctx.web.topic_coverage(source, interests.topics)
+                if excluded:
+                    ctx.warn(
+                        f"source '{source.id}': web_search covers {len(included)} of "
+                        f"{len(included) + len(excluded)} enabled topics this run "
+                        f"({', '.join(t.id for t in included)}); capped out by max_queries: "
+                        f"{', '.join(t.id for t in excluded)} (raise max_queries to include)"
+                    )
                 return ctx.web.search(
                     source, self.extraction_spec(), interests, tz, ctx.now, window
                 )

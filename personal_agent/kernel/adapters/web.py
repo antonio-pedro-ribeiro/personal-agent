@@ -155,6 +155,15 @@ class WebSources:
         return items
 
     @staticmethod
+    def topic_coverage(source: Source, topics: Sequence[Topic]) -> tuple[list[Topic], list[Topic]]:
+        """Topics this source's ``max_queries`` actually covers this run vs. capped out,
+        highest weight first. Lets a caller warn when raising a topic's weight or adding a
+        topic silently drops another one from ``web_search`` coverage."""
+        limit = max(0, _int(source.attrs.get("max_queries"), DEFAULT_MAX_QUERIES))
+        ranked = sorted((t for t in topics if t.enabled), key=lambda t: -t.weight)
+        return ranked[:limit], ranked[limit:]
+
+    @staticmethod
     def queries(
         source: Source,
         topics: Sequence[Topic],
@@ -164,13 +173,12 @@ class WebSources:
         window: timedelta,
     ) -> list[str]:
         """One query per topic, highest weight first, capped at ``max_queries``."""
-        limit = _int(source.attrs.get("max_queries"), DEFAULT_MAX_QUERIES)
         template = source.attrs.get("query") or DEFAULT_QUERY
         start = now.astimezone(tz).date()
         end = (now + window).astimezone(tz).date()
-        ranked = sorted((t for t in topics if t.enabled), key=lambda t: -t.weight)
+        included, _excluded = WebSources.topic_coverage(source, topics)
         out: list[str] = []
-        for topic in ranked[: max(0, limit)]:
+        for topic in included:
             terms = topic.description or ", ".join([topic.id, *topic.keywords])
             out.append(
                 template.format(
