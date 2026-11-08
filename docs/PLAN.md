@@ -166,8 +166,8 @@ Gmail clients; idempotency and namespace per output.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Safejourney / AllTera pages are JS-rendered, login-only or lack dates | No events from them | M2 spike first; feed discovery; fall back to web search with `allowed_domains` |
-| LLM extraction errors (wrong dates) | Bad suggestions | Schema + date validation; source URL required; feedback loop; review gate after M3 |
+| LLM extraction errors (wrong dates) | Bad suggestions | Schema + date validation; source URL required; feedback loop; quality check after M3 |
 | Google OAuth token expiry | Scheduled runs fail silently | Consent screen "In production"; workflow fails loudly; digest notes auth errors |
-| Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; review gate |
+| Web search cost creep | Budget overrun | `max_queries` cap; per-run cost log; quality check after M3 |
 | M2 is the largest milestone | Slips | The spike and LLM services come first; Calendar work can start in parallel against fake clients |
 | GitHub Actions cron delays | Late digests | Acceptable for daily cadence; manual dispatch available |
