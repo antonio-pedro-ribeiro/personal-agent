@@ -433,14 +433,21 @@ two outputs and the config parser agree on syntax.
 
 ## 6. CLI
 ```
-agent run [--plugin events|news] [--output <id>] [--dry-run]
+agent run [--plugin events|news] [--output <id>] [--dry-run] [--explain] [--max-cost USD]
 agent plugins                     # content + output plugins, enabled state
 agent sources test <id>
 agent outputs test <id>           # publish one sample item to that output's namespace
-agent rate <item-id> up|down
 agent auth google                 # one-time OAuth consent for enabled outputs' scopes
-agent schedule install|remove     # Task Scheduler on Windows, cron/launchd elsewhere
+agent rate <item-id> up|down      # planned (M4), not yet implemented
+agent schedule install|remove     # planned (M4), not yet implemented
 ```
+`--dry-run` skips publishing only; ranking/extraction LLM calls still happen and are still
+billed, so it is a safe-to-publish preview, not a free one. `--explain` prints every ranked
+item's score, reason and verdict (kept / capped by `max_items` / below threshold), so "why was
+item X filtered?" has a direct, CLI-native answer instead of requiring database access.
+`--max-cost` exits 3 with a warning if the run's actual cost exceeds the given USD amount; it
+is checked after the run completes and does not prevent the LLM calls that already happened.
+
 The CLI is the **only** integration boundary into the kernel. Every other client — the
 scheduled cloud/local run, and the IDE cockpit below — invokes it rather than importing kernel
 or plugin modules directly, so the microkernel invariants (§1) hold regardless of caller.
@@ -458,10 +465,11 @@ troubleshooting. It is tooling around the product, not part of it:
 - **Unrelated to the kernel's own LLM use.** The kernel's `Ranker`/`Extractor` calls (§1, "LLM
   providers") are a narrow, structured, cost-accounted part of the run loop. The cockpit's
   conversational model is a separate, human-facing concern; neither depends on the other.
-- **Write access is scoped to `config/*.md` and `docs/`.** Changes to `kernel/` or `plugins/`
-  code are expected to go through a reviewed coding session, not the cockpit agent, so the
-  "kernel never imports plugins" and idempotency invariants aren't put at risk by a casual
-  chat instruction.
+- **Write access is scoped to `config/*.md` and `docs/`, and enforced by a hook**, not just
+  the cockpit's instructions: `scripts/check_cockpit_edit_scope.py` runs as a `PreToolUse` hook
+  and denies `edit`/`create` calls outside that scope. Changes to `kernel/` or `plugins/` code
+  go through a reviewed coding session instead, so the "kernel never imports plugins" and
+  idempotency invariants aren't put at risk by a casual chat instruction.
 
 ## 7. Code layout
 ```
@@ -484,11 +492,13 @@ personal_agent/
       google_calendar.py  google_tasks.py  obsidian.py  markdown_digest.py  email.py
   cli.py
 config/interests.md, config/sources.md, config/outputs.md
-digests/                    # markdown_digest output
+digests/                    # markdown_digest output (generated; gitignored, not committed)
 .github/workflows/agent.yml # cloud mode: scheduled run, state branch
 .github/workflows/ci.yml    # tests on ubuntu + windows
 .github/agents/personal-agent.agent.md  # IDE cockpit (§6); calls the CLI, not the kernel
 .vscode/tasks.json           # CLI commands exposed as VS Code tasks
+scripts/check_cockpit_edit_scope.py  # PreToolUse hook enforcing the cockpit's write scope
+.pre-commit-config.yaml      # local mirror of ci.yml: ruff, mypy, lint-imports, pytest
 ```
 
 ## 8. Stack

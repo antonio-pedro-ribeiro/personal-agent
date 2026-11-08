@@ -282,10 +282,13 @@ this section makes the boundary explicit.
   (`LLM: claude-opus-5-5, N call(s), … tokens, ~$X`). There is no autonomous decision-making
   loop anywhere in the kernel beyond that one scoring step — filtering, routing and publishing
   remain deterministic Python.
-- **Write access is scoped.** The cockpit's instructions restrict it to editing
-  `config/*.md` and `docs/`; changes to `kernel/` or `plugins/` code are expected to go through
-  a reviewed coding session so a casual chat instruction can't accidentally violate the
-  "kernel never imports plugins" rule or the idempotent-publish contract.
+- **Write access is scoped, and enforced, not just written.** A `PreToolUse` hook
+  (`scripts/check_cockpit_edit_scope.py`, wired in the cockpit's own frontmatter) denies any
+  `edit`/`create` call whose target falls outside `config/*.md` and `docs/`, so changes to
+  `kernel/` or `plugins/` code are mechanically blocked rather than merely discouraged by
+  instructions — a casual chat instruction can't accidentally violate the "kernel never
+  imports plugins" rule or the idempotent-publish contract. It does not inspect `execute`
+  (shell) calls for redirection-based writes, which remains a known, documented gap.
 
 ```mermaid
 flowchart LR
