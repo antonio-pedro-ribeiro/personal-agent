@@ -21,6 +21,10 @@ Edit freely. Checked boxes are active; uncheck to pause. Format: docs/SPEC.md §
   - keywords: jazz, improv
   - weight: 0.9
   - plugins: events
+- [x] **psychedelics** — Talks, meetups, integration circles and retreats about psychedelics
+  - keywords: psychedelic, psychedelics, psicadélico, psicadélicos, psilocybin, psilocibina, mushrooms, ayahuasca, DMT, LSD, mescaline, MDMA
+  - weight: 0.9
+  - plugins: events
 
 ## Dislikes
 - [x] networking mixers
